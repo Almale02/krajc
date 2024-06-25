@@ -4,6 +4,7 @@ use std::{
 };
 
 use crate::{
+    ecs::ecs_manager::EcsManager,
     rendering::{buffer_manager::buffer_manager::BufferManager, managers::RenderManagerResource},
     typed_addr::TypedAddr,
     ENGINE_RUNTIME,
@@ -22,6 +23,7 @@ pub struct EngineRuntime {
     pub static_resource_map: HashMap<TypeId, usize>,
     pub system_locals: HashMap<&'static str, HashMap<u8, Box<dyn Any>>>,
     pub buffer_manager: BufferManager,
+    pub ecs: EcsManager,
 }
 
 impl Default for EngineRuntime {
@@ -39,6 +41,7 @@ impl EngineRuntime {
             static_resource_map: Default::default(),
             system_locals: Default::default(),
             buffer_manager: BufferManager::new(),
+            ecs: EcsManager::default(),
         }
     }
     pub fn init() -> &'static mut Self {

@@ -1,4 +1,5 @@
-use krajc::system_fn;
+use krajc::{filter, system_fn};
+use legion::Read;
 use pollster::FutureExt;
 use typed_addr::TypedAddr;
 
@@ -10,7 +11,8 @@ use engine_runtime::{
     schedule_manager::{
         runtime_schedule::{RuntimeUpdateSchedule, RuntimeUpdateScheduleData},
         system_params::{
-            system_local::Local, system_resource::Res, system_schedule_data::SchedData,
+            system_local::Local, system_query::SystemQuery, system_resource::Res,
+            system_schedule_data::SchedData,
         },
     },
     EngineRuntime,
@@ -30,6 +32,7 @@ use winit::{dpi::PhysicalSize, event::*, event_loop::EventLoop, window::WindowBu
 
 pub static mut ENGINE_RUNTIME: TypedAddr<EngineRuntime> = TypedAddr::<EngineRuntime>::default();
 
+pub mod ecs;
 pub mod engine_runtime;
 ///#[forbid(clippy::unwrap_used)]
 #[allow(invalid_reference_casting)]
@@ -75,11 +78,19 @@ fn main() {
     run().block_on();
 }
 
+/*
+
+    #[filter(!component::<Vel>())]
+    camera_query: SystemQuery<(<Pos>)>,
+*/
 #[system_fn(RuntimeUpdateSchedule)]
 fn fps_logger(
     update: SchedData<RuntimeUpdateScheduleData>,
     mut prev_full_sec: Local<u64>,
     mut render_state: Res<RenderManagerResource>,
+
+    // this is the query part
+    #[filter(!component::<Vel>())] camera_query: SystemQuery<(Read<Pos>)>,
 ) {
     let render_state = render_state.get_static_mut();
 
