@@ -1,4 +1,4 @@
-use krajc::{filter, system_fn};
+use krajc::{system_fn, system_fn2};
 use legion::Read;
 use pollster::FutureExt;
 use typed_addr::TypedAddr;
@@ -110,7 +110,7 @@ fn fps_logger(
     }
 }
 
-#[system_fn(RuntimeUpdateSchedule)]
+#[system_fn2(RuntimeUpdateSchedule)]
 fn update_rendering(
     mut render_state: Res<RenderManagerResource>,
     update: SchedData<RuntimeUpdateScheduleData>,

@@ -3,8 +3,13 @@ use std::{borrow::Borrow, ops::Deref};
 use proc_macro::TokenStream;
 use quote::{quote, quote_spanned, ToTokens};
 use syn::{
-    parse::{Parse, ParseStream}, parse_macro_input, AttrStyle, AttributeArgs, Expr, FnArg, ItemFn, Lit, Meta, NestedMeta, Pat, PatType, Result
+    parse::{Parse, ParseStream, Parser},
+    parse_macro_input, AttrStyle, AttributeArgs, Expr, FnArg, ItemFn, Lit, Meta, NestedMeta, Pat,
+    PatType, Result,
 };
+extern crate proc_macro;
+
+type TokenStream2 = proc_macro2::TokenStream;
 
 #[proc_macro_attribute]
 pub fn system_fn2(attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -48,30 +53,6 @@ pub fn system_fn2(attr: TokenStream, item: TokenStream) -> TokenStream {
     TokenStream::from(expanded)
 }
 
-extern crate proc_macro;
-
-fn extract(attr: &syn::Attribute) -> Option<TokenStream> {
-    if let Ok(meta) = attr.parse_meta() {
-        if let syn::Meta::List(list) = meta {
-            for nested_meta in list.nested {
-                if let syn::NestedMeta::Meta(meta) = nested_meta {
-                    match meta {
-                        syn::Meta::Path(call) => {
-                            // Example: Transforming a call to a method into a different call
-                            let transformed_call = quote! {some.new_method()};
-                            return Some(transformed_call.into());
-                        }
-                        _ => {
-                            // Handle other cases if needed
-                        }
-                    }
-                }
-            }
-        }
-    }
-    None
-}
-
 #[proc_macro_attribute]
 pub fn system_fn(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as AttributeArgs);
@@ -103,9 +84,12 @@ pub fn system_fn(attr: TokenStream, item: TokenStream) -> TokenStream {
         if let FnArg::Typed(PatType { pat, attrs, .. }) = arg {
             if let Pat::Ident(ident) = &**pat {
                 for attr in attrs {
-                    let a = attr.parse_args().unwrap();
                     if attr.path.is_ident("filter") {
-                        let content = (attr.style)
+                        let parser = MyParsrer;
+                        let content = attr
+                            .parse_args_with(parser)
+                            .expect("paniced because parser failed");
+                        query_filters.push(content);
                     }
                 }
             }
@@ -149,3 +133,14 @@ pub fn system_fn(attr: TokenStream, item: TokenStream) -> TokenStream {
     TokenStream::from(expanded)
 }
 
+struct MyParsrer;
+
+impl Parser for MyParsrer {
+    type Output = TokenStream;
+    fn parse(self, tokens: proc_macro::TokenStream) -> Result<Self::Output> {
+        Ok(tokens)
+    }
+    fn parse2(self, tokens: TokenStream2) -> Result<Self::Output> {
+        Ok(std::convert::Into::into(tokens))
+    }
+}
