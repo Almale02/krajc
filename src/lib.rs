@@ -1,7 +1,7 @@
 use std::{borrow::Borrow, ops::Deref};
 
 use proc_macro::TokenStream;
-use quote::{quote, quote_spanned, ToTokens};
+use quote::{format_ident, quote, quote_spanned, ToTokens};
 use syn::{
     parse::{Parse, ParseStream, Parser},
     parse_macro_input, AttrStyle, AttributeArgs, Expr, FnArg, ItemFn, Lit, Meta, NestedMeta, Pat,
@@ -100,14 +100,14 @@ pub fn system_fn(attr: TokenStream, item: TokenStream) -> TokenStream {
     let filter_structs: Vec<_> = query_filters
         .iter()
         .map(|filter_stream| {
-            let struct_name = format!("SystemQueryFilter__{}__{}", fn_name, "test");
+            let struct_name = format_ident!("SystemQueryFilter__{}__{}", fn_name, "test");
             let stream = filter_stream.to_string();
             quote! {
                 // Generated struct
                 struct #struct_name;
 
                 impl SystemFilter for #struct_name {
-                    pub fn get_query<T: IntoView>() -> impl legion::query::Query {
+                    fn get_query<T: IntoView>() -> impl legion::query::Query {
                         T::query().filter(#stream)
                     }
                 }

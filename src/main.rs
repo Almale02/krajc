@@ -1,5 +1,5 @@
 use krajc::{system_fn, system_fn2};
-use legion::Read;
+use legion::{internals::query::view::IntoView, query::EntityFilter, Query, Read};
 use pollster::FutureExt;
 use typed_addr::TypedAddr;
 
@@ -469,5 +469,30 @@ impl<T: Clone> Clone for Lateinit<T> {
         Self {
             value: LateinitEnum::Some(value.clone()),
         }
+    }
+}
+/*
+impl SystemFilter for #struct_name {
+    fn get_query<T: IntoView>() -> impl legion::query::Query {
+        T::query().filter(#stream)
+    }
+}*/
+
+use legion::{
+    internals::{
+        iter::indexed::{TrustedRandomAccess, TrustedRandomAccessExt},
+        query::filter::component,
+    },
+    query::{ChunkView, IntoIndexableIter},
+    *,
+};
+
+trait SystemFilter {
+    fn get_query<T: IntoView>() -> EntityFilter;
+}
+
+impl SystemFilter for i32 {
+    fn get_query<T: IntoView>() -> EntityFilter {
+        !component::<Vec>()
     }
 }
