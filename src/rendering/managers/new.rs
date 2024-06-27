@@ -1,6 +1,5 @@
 use std::ops::Deref;
 
-
 use image::GenericImageView;
 
 use wgpu::{
@@ -51,7 +50,7 @@ impl EngineRuntime {
             .expect("failed");
 
         drop(instance);
-        let limits = Limits::default();
+        let limits = Limits::downlevel_webgl2_defaults();
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {

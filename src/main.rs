@@ -1,5 +1,15 @@
 use krajc::{system_fn, system_fn2};
-use legion::{internals::query::view::IntoView, query::EntityFilter, Query, Read};
+use legion::{
+    internals::query::view::IntoView,
+    query::{
+        ComponentChangedFilter, ComponentFilter, EntityFilter, EntityFilterTuple, Passthrough,
+    },
+    Query, Read,
+};
+
+type QueryFilter<A, B> = EntityFilterTuple<A, B>;
+type Component<A> = ComponentFilter<A>;
+
 use pollster::FutureExt;
 use typed_addr::TypedAddr;
 
@@ -89,8 +99,7 @@ fn fps_logger(
     mut prev_full_sec: Local<u64>,
     mut render_state: Res<RenderManagerResource>,
 
-    // this is the query part
-    #[filter(!component::<Vel>())] camera_query: SystemQuery<(Read<Pos>)>,
+    camera_query: SystemQuery<Read<Pos>, QueryFilter<Component<Vec3>, Passthrough>>,
 ) {
     let render_state = render_state.get_static_mut();
 
@@ -110,7 +119,7 @@ fn fps_logger(
     }
 }
 
-#[system_fn2(RuntimeUpdateSchedule)]
+#[system_fn(RuntimeUpdateSchedule)]
 fn update_rendering(
     mut render_state: Res<RenderManagerResource>,
     update: SchedData<RuntimeUpdateScheduleData>,
@@ -486,13 +495,3 @@ use legion::{
     query::{ChunkView, IntoIndexableIter},
     *,
 };
-
-trait SystemFilter {
-    fn get_query<T: IntoView>() -> EntityFilter;
-}
-
-impl SystemFilter for i32 {
-    fn get_query<T: IntoView>() -> EntityFilter {
-        !component::<Vec>()
-    }
-}
