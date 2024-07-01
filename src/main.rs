@@ -1,27 +1,36 @@
 use krajc::{system_fn, system_fn2};
 use legion::{
-    internals::query::view::IntoView,
-    query::{
-        ComponentChangedFilter, ComponentFilter, EntityFilter, EntityFilterTuple, Passthrough,
-    },
+    component,
+    internals::{query::view::IntoView, storage::component, world::Comp},
+    query::{Changed, ComponentFilter, EntityFilter, EntityFilterTuple, Passthrough},
+    storage::Component,
     Query, Read,
 };
 
-type QueryFilter<A, B> = EntityFilterTuple<A, B>;
-type Component<A> = ComponentFilter<A>;
+type QueryFilter<A, B = Passthrough> = EntityFilterTuple<A, B>;
+type Comp<A> = ComponentFilter<A>;
 
 use pollster::FutureExt;
 use typed_addr::TypedAddr;
 
-use std::{collections::HashMap, hash::Hash, ops::Deref, time::Instant};
+use std::{
+    collections::HashMap,
+    hash::Hash,
+    ops::{Deref, DerefMut},
+    time::Instant,
+};
 
 use cgmath::Vector3;
 
 use engine_runtime::{
     schedule_manager::{
-        runtime_schedule::{RuntimeUpdateSchedule, RuntimeUpdateScheduleData},
+        runtime_schedule::{
+            RuntimeEngineLoadScheduleData, RuntimeUpdateSchedule, RuntimeUpdateScheduleData,
+        },
         system_params::{
-            system_local::Local, system_query::SystemQuery, system_resource::Res,
+            system_local::Local,
+            system_query::{EcsWorld, SystemQuery},
+            system_resource::Res,
             system_schedule_data::SchedData,
         },
     },
@@ -39,6 +48,8 @@ use rendering::{
 
 use wgpu::{Buffer, BufferUsages, SurfaceError};
 use winit::{dpi::PhysicalSize, event::*, event_loop::EventLoop, window::WindowBuilder};
+
+use crate::engine_runtime::schedule_manager::runtime_schedule::RuntimeEngineLoadSchedule;
 
 pub static mut ENGINE_RUNTIME: TypedAddr<EngineRuntime> = TypedAddr::<EngineRuntime>::default();
 
@@ -88,19 +99,78 @@ fn main() {
     run().block_on();
 }
 
+struct Vel(Vec3);
+struct Position(Vec3);
+#[derive(Default)]
+struct Health(u32);
+
+impl Comp for Health {}
+
 /*
 
-    #[filter(!component::<Vel>())]
+    #[fi
+   lter(!compone,t
+        )::<Vel>())]
     camera_query: SystemQuery<(<Pos>)>,
 */
+
+#[system_fn(RuntimeEngineLoadSchedule)]
+fn startup(startup: SchedData<RuntimeEngineLoadScheduleData>, mut world: EcsWorld) {
+    dbg!("ran startup");
+    let mut entities_1 = vec![];
+    let mut entities_2 = vec![];
+
+    for i in 0..9999 {
+        entities_1.push((
+            Vel(Vec3 {
+                x: i as f32,
+                y: -i as f32,
+                z: 0.,
+            }),
+            Position(Vec3 {
+                x: -i as f32,
+                y: i as f32,
+                z: 2. * i as f32,
+            }),
+        ))
+    }
+    for i in 0..9999 {
+        entities_2.push((
+            Vel(Vec3 {
+                x: i as f32,
+                y: -(i as f32),
+                z: 0.,
+            }),
+            Health(i),
+        ))
+    }
+    world.extend(entities_1);
+    world.extend(entities_2);
+}
+
 #[system_fn(RuntimeUpdateSchedule)]
 fn fps_logger(
     update: SchedData<RuntimeUpdateScheduleData>,
     mut prev_full_sec: Local<u64>,
     mut render_state: Res<RenderManagerResource>,
 
-    camera_query: SystemQuery<Read<Pos>, QueryFilter<Component<Vec3>, Passthrough>>,
+    mut world: EcsWorld,
+    camera_query: SystemQuery<Read<Vel>, QueryFilter<Health>>,
 ) {
+    let mut query = camera_query.query();
+
+    let mut counter = 0;
+    unsafe {
+        for chunk in query.iter_chunks_unchecked(world.deref_mut()) {
+            let chunk = chunk.get_indexable();
+
+            for _entity in chunk {
+                counter += 1;
+            }
+        }
+    }
+    dbg!(counter);
+
     let render_state = render_state.get_static_mut();
 
     if *prev_full_sec != update.since_start.as_secs_f64() as u64 {
@@ -167,9 +237,9 @@ pub async fn run() {
         .register_new_buffer::<InstanceBufferType>();
 
     let render_states = runtime.get_resource::<RenderManagerResource>();
-
     fps_logger!(runtime);
     update_rendering!(runtime);
+    startup!(runtime);
 
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new()
@@ -188,6 +258,9 @@ pub async fn run() {
     let start = Instant::now();
     let mut prev_full_sec = 0_u64;
     let window_ref = render_states.window.get_ref();
+
+    let load = runtime.get_resource::<RuntimeEngineLoadSchedule>();
+    load.execute();
 
     event_loop.run(move |event, _window_target, control_flow| match event {
         Event::DeviceEvent {
@@ -480,18 +553,3 @@ impl<T: Clone> Clone for Lateinit<T> {
         }
     }
 }
-/*
-impl SystemFilter for #struct_name {
-    fn get_query<T: IntoView>() -> impl legion::query::Query {
-        T::query().filter(#stream)
-    }
-}*/
-
-use legion::{
-    internals::{
-        iter::indexed::{TrustedRandomAccess, TrustedRandomAccessExt},
-        query::filter::component,
-    },
-    query::{ChunkView, IntoIndexableIter},
-    *,
-};

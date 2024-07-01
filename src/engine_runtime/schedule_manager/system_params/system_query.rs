@@ -1,4 +1,7 @@
-use std::{marker::PhantomData, ops::BitAnd};
+use std::{
+    marker::PhantomData,
+    ops::{BitAnd, Deref, DerefMut},
+};
 
 use legion::{
     internals::{iter::indexed::TrustedRandomAccessExt, query::view::IntoView},
@@ -8,8 +11,11 @@ use legion::{
 
 use super::system_param::SystemParam;
 
-pub struct SystemQuery<Fetch, Filter, T = EntityFilterTuple<Passthrough, Passthrough>>
-where
+pub struct SystemQuery<
+    Fetch,
+    Filter = EntityFilterTuple<Passthrough, Passthrough>,
+    T = EntityFilterTuple<Passthrough, Passthrough>,
+> where
     Fetch: IntoView + DefaultFilter,
     Filter: EntityFilter,
     T: BitAnd<Filter> + EntityFilter,
@@ -27,8 +33,8 @@ where
     T: BitAnd<Filter> + EntityFilter,
     <T as BitAnd<Filter>>::Output: EntityFilter,
 {
-    pub fn query(filter: Filter) -> Query<Fetch, <T as BitAnd<Filter>>::Output> {
-        let query = <Query<Fetch, T>>::new().filter(filter);
+    pub fn query(self) -> Query<Fetch, <T as BitAnd<Filter>>::Output> {
+        let query = <Query<Fetch, T>>::new().filter(Filter::default());
         return query;
     }
 }
@@ -52,3 +58,28 @@ where
 }
 
 trait QueryFilterable {}
+
+pub struct EcsWorld {
+    world: &'static mut World,
+}
+impl From<SystemParam> for EcsWorld {
+    fn from(value: SystemParam) -> Self {
+        Self {
+            world: &mut value.engine.ecs.world,
+        }
+    }
+}
+
+impl Deref for EcsWorld {
+    type Target = World;
+
+    fn deref(&self) -> &Self::Target {
+        self.world
+    }
+}
+
+impl DerefMut for EcsWorld {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.world
+    }
+}

@@ -11,8 +11,6 @@ use crate::{
     typed_addr::TypedAddr,
 };
 
-
-
 /*pub static mut SCHEDULE_STATES: TypedAddr<RuntimeScheduleResource> = TypedAddr::<_>::default();
 
 generate_state_struct!(RuntimeScheduleResource {
@@ -32,15 +30,13 @@ struct_with_default!(RuntimeUpdateSchedule {
 implement_schedule!(RuntimeUpdateSchedule);
 init_resource!(RuntimeUpdateSchedule);
 
-generate_state_struct!(RuntimeEngineLoadScheduleData {
+generate_state_struct_non_resource!(RuntimeEngineLoadScheduleData {
     dummy: u32 = "dummy" => 0
 });
 struct_with_default!(RuntimeEngineLoadSchedule{
     schedule_name: String = "engine_load".into(),
     actions: Vec<Box<dyn ScheduleRunnable>> = Vec::default(),
-    schedule_state: TypedAddr<RuntimeEngineLoadScheduleData> = TypedAddr::default(),
+    schedule_state: TypedAddr<RuntimeEngineLoadScheduleData> = TypedAddr::new_with_ref(RuntimeEngineLoadScheduleData::init())
 });
 implement_schedule!(RuntimeEngineLoadSchedule);
 init_resource!(RuntimeEngineLoadSchedule);
-
-fn a() {}

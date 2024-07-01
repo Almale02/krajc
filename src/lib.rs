@@ -1,5 +1,6 @@
 use std::{borrow::Borrow, ops::Deref};
 
+use legion::internals::world::Comp;
 use proc_macro::TokenStream;
 use quote::{format_ident, quote, quote_spanned, ToTokens};
 use syn::{
@@ -143,4 +144,22 @@ impl Parser for MyParsrer {
     fn parse2(self, tokens: TokenStream2) -> Result<Self::Output> {
         Ok(std::convert::Into::into(tokens))
     }
+}
+
+#[proc_macro_derive(Comp)]
+pub fn comp_derive(input: TokenStream) -> TokenStream {
+    // Parse the input tokens into a syntax tree
+    let ast = syn::parse(input).unwrap();
+
+    // Build the trait implementation
+    impl_comp(&ast)
+}
+
+fn impl_comp(ast: &syn::DeriveInput) -> TokenStream {
+    let name = &ast.ident;
+    let gen = quote! {
+        impl legion::internals::world::Comp for #name {}
+
+    };
+    gen.into()
 }
