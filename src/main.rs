@@ -148,22 +148,18 @@ fn fps_logger(
     mut render_state: Res<RenderManagerResource>,
 
     mut world: EcsWorld,
-
-    mut counter: Local<u32>,
 ) {
-    *counter += 1;
-
     let render_state = render_state.get_static_mut();
-
-    world.push((
-        Position(Vec3::new(0., 0., *prev_full_sec as f32 + 1.)),
-        TextureMaterialInstance::from_pos(Vec3::new(0., 0., *counter.deref() as f32)),
-    ));
-    dbg!(*counter);
 
     if *prev_full_sec != update.since_start.as_secs_f64() as u64 {
         dbg!(1. / update.dt.as_secs_f64());
         *prev_full_sec = update.since_start.as_secs_f64() as u64;
+        dbg!(*prev_full_sec);
+        world.push((TextureMaterialInstance::from_pos(Vec3::new(
+            (prev_full_sec.deref() + 1) as f32,
+            0.,
+            0.,
+        )),));
 
         /*let instance_scheme = TestInstanceSchemes::row(*prev_full_sec as i32 + 1);
         *render_state.instance_scheme = instance_scheme.clone();

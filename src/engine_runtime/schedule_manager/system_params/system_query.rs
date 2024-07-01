@@ -4,9 +4,9 @@ use std::{
 };
 
 use legion::{
-    internals::{iter::indexed::TrustedRandomAccessExt, query::view::IntoView},
+    internals::{iter::indexed::TrustedRandomAccessExt, query::view::IntoView, world::Comp},
     query::{DefaultFilter, DynamicFilter, EntityFilter, EntityFilterTuple, Passthrough},
-    Query, World,
+    IntoQuery, Query, World,
 };
 
 use super::system_param::SystemParam;
@@ -32,10 +32,16 @@ where
     Filter: EntityFilter,
     T: BitAnd<Filter> + EntityFilter,
     <T as BitAnd<Filter>>::Output: EntityFilter,
+    <<Fetch as IntoView>::View as DefaultFilter>::Filter: BitAnd<Filter>,
+    <<<Fetch as IntoView>::View as DefaultFilter>::Filter as BitAnd<Filter>>::Output: EntityFilter,
 {
-    pub fn query(self) -> Query<Fetch, <T as BitAnd<Filter>>::Output> {
-        let query = <Query<Fetch, T>>::new().filter(Filter::default());
-        return query;
+    pub fn query(
+        self,
+    ) -> Query<
+        Fetch,
+        <<<Fetch as IntoView>::View as DefaultFilter>::Filter as BitAnd<Filter>>::Output,
+    > {
+        <Fetch>::query().filter(Filter::default())
     }
 }
 

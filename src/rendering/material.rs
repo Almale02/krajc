@@ -2,7 +2,10 @@ use std::ops::{Deref, Range};
 
 use cgmath::Zero;
 use krajc::{system_fn, system_fn_non_expand, Comp};
-use legion::{query::EntityFilterTuple, Query, Read};
+use legion::{
+    query::{ComponentFilter, EntityFilterTuple, Passthrough},
+    IntoQuery, Query, Read,
+};
 use wgpu::*;
 
 use crate::{
@@ -61,24 +64,10 @@ pub fn update_texture_material(
     world: EcsWorld,
 ) {
     let render = render.get_static_mut();
-    let mut iter: Vec<&TextureMaterialInstance> = vec![];
 
-    unsafe {
-        for chunk in query.query().iter_chunks_unchecked(&*world) {
-            let chunk = chunk.get_indexable();
-
-            for entity in chunk {
-                iter.push(entity);
-            }
-        }
-    }
-
-    if iter.len().is_zero() {
-        dbg!("zero");
-    }
-
-    let instances_raw = iter
-        .into_iter()
+    let instances_raw = query
+        .query()
+        .iter(&*world)
         .map(TextureMaterialInstance::to_raw)
         .collect::<Vec<_>>();
 
