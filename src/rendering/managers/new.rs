@@ -18,7 +18,7 @@ use crate::{
         mesh::mesh::TextureVertex,
         render_entity::{
             instancing::TestInstanceSchemes,
-            render_entity::{RawRenderEntity, RenderEntity},
+            render_entity::{RawTextureMaterialInstance, TextureMaterialInstance},
         },
         texture::texture::Texture,
     },
@@ -78,7 +78,7 @@ impl EngineRuntime {
         let instance_scheme = TestInstanceSchemes::row(2);
         let _instance_data = instance_scheme
             .iter()
-            .map(RenderEntity::to_raw)
+            .map(TextureMaterialInstance::to_raw)
             .collect::<Vec<_>>();
         let instance_buffer = ManagedBufferInstanceHandle::<InstanceBufferType>::new_with_size(
             "instance_buffer".to_owned(),
@@ -202,7 +202,7 @@ impl EngineRuntime {
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: "vs_main", // 1.
-                buffers: &[TextureVertex::layout(), RawRenderEntity::desc()], // 2.
+                buffers: &[TextureVertex::layout(), RawTextureMaterialInstance::desc()], // 2.
             },
             fragment: Some(wgpu::FragmentState {
                 // 3.

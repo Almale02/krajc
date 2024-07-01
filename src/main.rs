@@ -1,14 +1,13 @@
-use krajc::{system_fn, system_fn2};
+use krajc::{system_fn, system_fn2, Comp};
 use legion::{
     component,
     internals::{query::view::IntoView, storage::component, world::Comp},
     query::{Changed, ComponentFilter, EntityFilter, EntityFilterTuple, Passthrough},
     storage::Component,
-    Query, Read,
+    Entity, Query, Read,
 };
 
 type QueryFilter<A, B = Passthrough> = EntityFilterTuple<A, B>;
-type Comp<A> = ComponentFilter<A>;
 
 use pollster::FutureExt;
 use typed_addr::TypedAddr;
@@ -17,6 +16,7 @@ use std::{
     collections::HashMap,
     hash::Hash,
     ops::{Deref, DerefMut},
+    rc::Rc,
     time::Instant,
 };
 
@@ -43,13 +43,16 @@ use rendering::{
     buffer_manager::managed_buffer::ManagedBufferGeneric,
     managers::RenderManagerResource,
     mesh::mesh::Mesh,
-    render_entity::{instancing::TestInstanceSchemes, render_entity::RenderEntity},
+    render_entity::{instancing::TestInstanceSchemes, render_entity::TextureMaterialInstance},
 };
 
 use wgpu::{Buffer, BufferUsages, SurfaceError};
 use winit::{dpi::PhysicalSize, event::*, event_loop::EventLoop, window::WindowBuilder};
 
-use crate::engine_runtime::schedule_manager::runtime_schedule::RuntimeEngineLoadSchedule;
+use crate::{
+    engine_runtime::schedule_manager::runtime_schedule::RuntimeEngineLoadSchedule,
+    rendering::material::MaterialGeneric,
+};
 
 pub static mut ENGINE_RUNTIME: TypedAddr<EngineRuntime> = TypedAddr::<EngineRuntime>::default();
 
@@ -101,18 +104,8 @@ fn main() {
 
 struct Vel(Vec3);
 struct Position(Vec3);
-#[derive(Default)]
+#[derive(Default, Comp)]
 struct Health(u32);
-
-impl Comp for Health {}
-
-/*
-
-    #[fi
-   lter(!compone,t
-        )::<Vel>())]
-    camera_query: SystemQuery<(<Pos>)>,
-*/
 
 #[system_fn(RuntimeEngineLoadSchedule)]
 fn startup(startup: SchedData<RuntimeEngineLoadScheduleData>, mut world: EcsWorld) {
@@ -155,35 +148,30 @@ fn fps_logger(
     mut render_state: Res<RenderManagerResource>,
 
     mut world: EcsWorld,
-    camera_query: SystemQuery<Read<Vel>, QueryFilter<Health>>,
+
+    mut counter: Local<u32>,
 ) {
-    let mut query = camera_query.query();
-
-    let mut counter = 0;
-    unsafe {
-        for chunk in query.iter_chunks_unchecked(world.deref_mut()) {
-            let chunk = chunk.get_indexable();
-
-            for _entity in chunk {
-                counter += 1;
-            }
-        }
-    }
-    dbg!(counter);
+    *counter += 1;
 
     let render_state = render_state.get_static_mut();
+
+    world.push((
+        Position(Vec3::new(0., 0., *prev_full_sec as f32 + 1.)),
+        TextureMaterialInstance::from_pos(Vec3::new(0., 0., *counter.deref() as f32)),
+    ));
+    dbg!(*counter);
 
     if *prev_full_sec != update.since_start.as_secs_f64() as u64 {
         dbg!(1. / update.dt.as_secs_f64());
         *prev_full_sec = update.since_start.as_secs_f64() as u64;
 
-        let instance_scheme = TestInstanceSchemes::row(*prev_full_sec as i32 + 1);
+        /*let instance_scheme = TestInstanceSchemes::row(*prev_full_sec as i32 + 1);
         *render_state.instance_scheme = instance_scheme.clone();
         let instance_data = instance_scheme
             .iter()
-            .map(RenderEntity::to_raw)
+            .map(TextureMaterialInstance::to_raw)
             .collect::<Vec<_>>();
-        render_state.instance_buffer.set_data_vec(instance_data);
+        render_state.instance_buffer.set_data_vec(instance_data);*/
 
         dbg!(render_state.camera_uniform.view_pos);
     }
@@ -226,7 +214,7 @@ fn update_rendering(
 }
 
 pub async fn run() {
-    let runtime = EngineRuntime::init();
+    let mut runtime = EngineRuntime::init();
 
     runtime.buffer_manager.engine = unsafe { ENGINE_RUNTIME.get() };
     runtime
@@ -262,6 +250,7 @@ pub async fn run() {
     let load = runtime.get_resource::<RuntimeEngineLoadSchedule>();
     load.execute();
 
+    render_states.material.register_systems(&mut runtime);
     event_loop.run(move |event, _window_target, control_flow| match event {
         Event::DeviceEvent {
              event: DeviceEvent::MouseMotion{ delta, },
@@ -343,8 +332,6 @@ impl From<f32> for Float {
         Float(OrderedFloat(val))
     }
 }
-
-pub type Pos = Vec3;
 
 #[repr(C)]
 #[derive(PartialEq, Debug, Copy, Clone)]

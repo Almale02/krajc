@@ -1,50 +1,51 @@
+use std::convert::identity;
+
 use bytemuck::{Pod, Zeroable};
 use cgmath::{prelude::*, *};
 
 use crate::*;
 
-#[derive(Clone, PartialEq, Debug)]
-pub struct RenderEntity {
-    pub position: Pos,
+#[derive(Clone, PartialEq, Debug, Comp)]
+pub struct TextureMaterialInstance {
+    pub position: Vec3,
     pub rotation: Quaternion<f32>,
 }
 
-impl RenderEntity {
-    pub fn new(position: Pos, rotation: Quaternion<f32>) -> Self {
+impl Default for TextureMaterialInstance {
+    fn default() -> Self {
+        Self {
+            position: Vec3::new(0., 0., 0.),
+            rotation: <Quaternion<f32>>::zero(),
+        }
+    }
+}
+impl TextureMaterialInstance {
+    pub fn new(position: Vec3, rotation: Quaternion<f32>) -> Self {
         Self { position, rotation }
     }
-    pub fn from_pos(pos: Pos) -> Self {
+    pub fn from_pos(pos: Vec3) -> Self {
         Self::new(pos, Quaternion::zero())
     }
-    pub fn to_raw(&self) -> RawRenderEntity {
-        RawRenderEntity {
+    pub fn to_raw(&self) -> RawTextureMaterialInstance {
+        RawTextureMaterialInstance {
             model: (Matrix4::from_translation(self.position.into()) * Matrix4::from(self.rotation))
                 .into(),
         }
     }
 }
-impl From<RenderEntity> for RawRenderEntity {
-    fn from(val: RenderEntity) -> Self {
+impl From<TextureMaterialInstance> for RawTextureMaterialInstance {
+    fn from(val: TextureMaterialInstance) -> Self {
         val.to_raw()
-    }
-}
-
-impl Default for RenderEntity {
-    fn default() -> Self {
-        Self {
-            position: Pos::new(0., 0., 0.),
-            rotation: Quaternion::zero(),
-        }
     }
 }
 
 #[repr(C)]
 #[derive(Clone, Copy, Default, Pod, Zeroable)]
-pub struct RawRenderEntity {
+pub struct RawTextureMaterialInstance {
     pub model: [[f32; 4]; 4],
 }
 
-impl RawRenderEntity {
+impl RawTextureMaterialInstance {
     pub fn desc() -> wgpu::VertexBufferLayout<'static> {
         use std::mem;
         wgpu::VertexBufferLayout {

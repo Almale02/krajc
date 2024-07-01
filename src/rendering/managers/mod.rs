@@ -13,7 +13,7 @@ use super::{
     buffer_manager::managed_buffer::ManagedBufferInstanceHandle,
     camera::camera::{Camera, CameraController, CameraUniform, Projection},
     material::TextureMaterial,
-    render_entity::render_entity::RenderEntity,
+    render_entity::render_entity::TextureMaterialInstance,
     texture::texture::Texture,
 };
 
@@ -40,7 +40,7 @@ generate_state_struct!(RenderManagerResource {
 
      window: winit::window::Window = "window",
 
-     instance_scheme: Vec<RenderEntity> = "instance_scheme",
+     instance_scheme: Vec<TextureMaterialInstance> = "instance_scheme",
      instance_buffer: ManagedBufferInstanceHandle<InstanceBufferType>= "instance_buffer",
 
      camera: Camera = "camera",

@@ -1,19 +1,19 @@
 use cgmath::{Quaternion, Zero};
 
-use crate::Pos;
+use crate::Vec3;
 
-use super::render_entity::RenderEntity;
+use super::render_entity::TextureMaterialInstance;
 
 pub struct TestInstanceSchemes;
 
 impl TestInstanceSchemes {
-    pub fn row(len: i32) -> Vec<RenderEntity> {
-        let mut entity_list = vec![RenderEntity::default()];
+    pub fn row(len: i32) -> Vec<TextureMaterialInstance> {
+        let mut entity_list = vec![TextureMaterialInstance::default()];
         for i in 0..len {
-            let pos = Pos::new(i as f32 * 1., 0., 0.);
+            let pos = Vec3::new(i as f32 * 1., 0., 0.);
 
             let rotation = Quaternion::<f32>::zero();
-            let entity = RenderEntity::new(pos, rotation);
+            let entity = TextureMaterialInstance::new(pos, rotation);
 
             entity_list.push(entity);
         }

@@ -1,14 +1,29 @@
-use std::ops::Range;
+use std::ops::{Deref, Range};
 
+use cgmath::Zero;
+use krajc::{system_fn, system_fn_non_expand, Comp};
+use legion::{query::EntityFilterTuple, Query, Read};
 use wgpu::*;
 
-use crate::{engine_runtime::EngineRuntime, InstanceBufferType, Lateinit};
+use crate::{
+    engine_runtime::{
+        schedule_manager::{
+            runtime_schedule::RuntimeUpdateSchedule,
+            system_params::{
+                system_query::{EcsWorld, SystemQuery},
+                system_resource::Res,
+            },
+        },
+        EngineRuntime,
+    },
+    InstanceBufferType, Lateinit,
+};
 
 use super::{
     buffer_manager::managed_buffer::ManagedBufferInstanceHandle,
     managers::RenderManagerResource,
     mesh::mesh::{Mesh, TextureVertex},
-    render_entity::render_entity::RawRenderEntity,
+    render_entity::render_entity::{RawTextureMaterialInstance, TextureMaterialInstance},
     texture::texture::Texture,
 };
 
@@ -19,6 +34,7 @@ pub trait MaterialGeneric {
     fn instance_buffer(&'static self, engine: &mut EngineRuntime) -> &'static Buffer;
     fn set_bind_groups(&self, pipeline: &mut RenderPass<'_>, engine: &mut EngineRuntime);
     fn get_index_range(&self) -> Range<u32>;
+    fn register_systems(&self, engine: &mut EngineRuntime);
 }
 
 #[derive(Default)]
@@ -38,6 +54,36 @@ impl TextureMaterial {
     }
 }
 
+#[system_fn(RuntimeUpdateSchedule)]
+pub fn update_texture_material(
+    query: SystemQuery<Read<TextureMaterialInstance>>,
+    mut render: Res<RenderManagerResource>,
+    world: EcsWorld,
+) {
+    let render = render.get_static_mut();
+    let mut iter: Vec<&TextureMaterialInstance> = vec![];
+
+    unsafe {
+        for chunk in query.query().iter_chunks_unchecked(&*world) {
+            let chunk = chunk.get_indexable();
+
+            for entity in chunk {
+                iter.push(entity);
+            }
+        }
+    }
+
+    if iter.len().is_zero() {
+        dbg!("zero");
+    }
+
+    let instances_raw = iter
+        .into_iter()
+        .map(TextureMaterialInstance::to_raw)
+        .collect::<Vec<_>>();
+
+    render.instance_buffer.set_data_vec(instances_raw);
+}
 impl MaterialGeneric for TextureMaterial {
     fn render_pipeline(&self, engine: &mut EngineRuntime) -> RenderPipeline {
         let render = engine.get_resource::<RenderManagerResource>();
@@ -103,7 +149,7 @@ impl MaterialGeneric for TextureMaterial {
                 vertex: wgpu::VertexState {
                     module: &shader,
                     entry_point: "vs_main", // 1.
-                    buffers: &[TextureVertex::layout(), RawRenderEntity::desc()], // 2.
+                    buffers: &[TextureVertex::layout(), RawTextureMaterialInstance::desc()], // 2.
                 },
                 fragment: Some(wgpu::FragmentState {
                     // 3.
@@ -163,5 +209,8 @@ you could call Texture::get_texture_bind_group on the created texture, and then 
     }
     fn get_index_range(&self) -> Range<u32> {
         0..self.mesh.index_list.len() as u32
+    }
+    fn register_systems(&self, engine: &mut EngineRuntime) {
+        update_texture_material!(engine);
     }
 }
