@@ -1,5 +1,3 @@
-use std::convert::identity;
-
 use bytemuck::{Pod, Zeroable};
 use cgmath::{prelude::*, *};
 
@@ -28,8 +26,10 @@ impl TextureMaterialInstance {
     }
     pub fn to_raw(&self) -> RawTextureMaterialInstance {
         RawTextureMaterialInstance {
-            model: (Matrix4::from_translation(self.position.into()) * Matrix4::from(self.rotation))
-                .into(),
+            model: std::convert::Into::into(
+                Matrix4::from_translation(self.position.as_vector3())
+                    * Matrix4::from(self.rotation),
+            ),
         }
     }
 }

@@ -1,6 +1,5 @@
-use std::ops::{Deref, Range};
+use std::ops::Range;
 
-use cgmath::Zero;
 use krajc::{system_fn, system_fn_non_expand, Comp};
 use legion::{
     query::{ComponentFilter, EntityFilterTuple, Passthrough},
@@ -26,7 +25,10 @@ use super::{
     buffer_manager::managed_buffer::ManagedBufferInstanceHandle,
     managers::RenderManagerResource,
     mesh::mesh::{Mesh, TextureVertex},
-    render_entity::render_entity::{RawTextureMaterialInstance, TextureMaterialInstance},
+    render_entity::{
+        instancing::TestInstanceSchemes,
+        render_entity::{RawTextureMaterialInstance, TextureMaterialInstance},
+    },
     texture::texture::Texture,
 };
 
@@ -37,6 +39,7 @@ pub trait MaterialGeneric {
     fn instance_buffer(&'static self, engine: &mut EngineRuntime) -> &'static Buffer;
     fn set_bind_groups(&self, pipeline: &mut RenderPass<'_>, engine: &mut EngineRuntime);
     fn get_index_range(&self) -> Range<u32>;
+    fn get_instance_range(&self) -> Range<u32>;
     fn register_systems(&self, engine: &mut EngineRuntime);
 }
 
@@ -44,6 +47,7 @@ pub trait MaterialGeneric {
 pub struct TextureMaterial {
     mesh: Lateinit<Mesh>,
     instance_buffer: Lateinit<ManagedBufferInstanceHandle<InstanceBufferType>>,
+    pub instance_count: u32,
 }
 impl TextureMaterial {
     pub fn set_mesh(&mut self, mesh: Mesh) {
@@ -55,6 +59,19 @@ impl TextureMaterial {
     ) {
         self.instance_buffer.set(instance_buffer);
     }
+    pub fn set_instance_value(&'static mut self, data: Vec<TextureMaterialInstance>) {
+        self.instance_count = data.len() as u32;
+        self.instance_buffer.set_data_vec(
+            data.iter()
+                .map(TextureMaterialInstance::to_raw)
+                .collect::<Vec<_>>(),
+        );
+    }
+    pub fn set_instance_value_ref(&'static mut self, data: Vec<&TextureMaterialInstance>) {
+        self.instance_count = data.len() as u32;
+        self.instance_buffer
+            .set_data_vec(data.iter().map(|arg| arg.to_raw()).collect::<Vec<_>>());
+    }
 }
 
 #[system_fn(RuntimeUpdateSchedule)]
@@ -65,15 +82,16 @@ pub fn update_texture_material(
 ) {
     let render = render.get_static_mut();
 
-    let instances_raw = query
-        .query()
-        .iter(&*world)
-        .map(TextureMaterialInstance::to_raw)
-        .collect::<Vec<_>>();
-
-    render.instance_buffer.set_data_vec(instances_raw);
+    let query2 = query.query().iter(&*world).collect::<Vec<_>>();
+    //let instance_data = query2.iter().map(|arg| arg.to_raw()).collect::<Vec<_>>();
+    dbg!(query2.last());
+    render.material.set_instance_value_ref(query2);
 }
+
 impl MaterialGeneric for TextureMaterial {
+    fn get_instance_range(&self) -> Range<u32> {
+        0..self.instance_count
+    }
     fn render_pipeline(&self, engine: &mut EngineRuntime) -> RenderPipeline {
         let render = engine.get_resource::<RenderManagerResource>();
 

@@ -13,14 +13,14 @@ use pollster::FutureExt;
 use typed_addr::TypedAddr;
 
 use std::{
-    collections::HashMap,
+    collections::{btree_map::VacantEntry, HashMap},
     hash::Hash,
     ops::{Deref, DerefMut},
     rc::Rc,
     time::Instant,
 };
 
-use cgmath::Vector3;
+use cgmath::{Point3, Vector3};
 
 use engine_runtime::{
     schedule_manager::{
@@ -46,7 +46,7 @@ use rendering::{
     render_entity::{instancing::TestInstanceSchemes, render_entity::TextureMaterialInstance},
 };
 
-use wgpu::{Buffer, BufferUsages, SurfaceError};
+use wgpu::{Buffer, BufferUsages, RenderBundle, SurfaceError};
 use winit::{dpi::PhysicalSize, event::*, event_loop::EventLoop, window::WindowBuilder};
 
 use crate::{
@@ -143,6 +143,7 @@ fn startup(startup: SchedData<RuntimeEngineLoadScheduleData>, mut world: EcsWorl
 
 #[system_fn(RuntimeUpdateSchedule)]
 fn fps_logger(
+    //query: SystemQuery<Read<TextureMaterialInstance>>,
     update: SchedData<RuntimeUpdateScheduleData>,
     mut prev_full_sec: Local<u64>,
     mut render_state: Res<RenderManagerResource>,
@@ -155,19 +156,9 @@ fn fps_logger(
         dbg!(1. / update.dt.as_secs_f64());
         *prev_full_sec = update.since_start.as_secs_f64() as u64;
         dbg!(*prev_full_sec);
-        world.push((TextureMaterialInstance::from_pos(Vec3::new(
-            (prev_full_sec.deref() + 1) as f32,
-            0.,
-            0.,
-        )),));
 
-        /*let instance_scheme = TestInstanceSchemes::row(*prev_full_sec as i32 + 1);
-        *render_state.instance_scheme = instance_scheme.clone();
-        let instance_data = instance_scheme
-            .iter()
-            .map(TextureMaterialInstance::to_raw)
-            .collect::<Vec<_>>();
-        render_state.instance_buffer.set_data_vec(instance_data);*/
+        let test = TextureMaterialInstance::from_pos(render_state.camera.position.into());
+        world.push((test,));
 
         dbg!(render_state.camera_uniform.view_pos);
     }
@@ -355,6 +346,11 @@ impl From<Vec3> for Vector3<f32> {
 }
 impl From<Vector3<f32>> for Vec3 {
     fn from(value: Vector3<f32>) -> Self {
+        Self::new(value.x, value.y, value.z)
+    }
+}
+impl From<Point3<f32>> for Vec3 {
+    fn from(value: Point3<f32>) -> Self {
         Self::new(value.x, value.y, value.z)
     }
 }

@@ -75,14 +75,14 @@ impl EngineRuntime {
         render_state.device.init(device);
         let device = &render_state.device;
 
-        let instance_scheme = TestInstanceSchemes::row(2);
-        let _instance_data = instance_scheme
+        let instance_scheme = TestInstanceSchemes::row(1000);
+        let instance_data = instance_scheme
             .iter()
             .map(TextureMaterialInstance::to_raw)
             .collect::<Vec<_>>();
         let instance_buffer = ManagedBufferInstanceHandle::<InstanceBufferType>::new_with_size(
             "instance_buffer".to_owned(),
-            4092,
+            4092u64.pow(2),
         );
 
         let camera_buffer = ManagedBufferInstanceHandle::<UniformBufferType>::new_with_init(

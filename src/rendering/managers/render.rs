@@ -1,10 +1,6 @@
 use wgpu::*;
 
-use crate::{
-    engine_runtime::EngineRuntime,
-    rendering::{material::MaterialGeneric},
-    ENGINE_RUNTIME,
-};
+use crate::{engine_runtime::EngineRuntime, rendering::material::MaterialGeneric, ENGINE_RUNTIME};
 
 use super::RenderManagerResource;
 
@@ -64,7 +60,7 @@ impl EngineRuntime {
         render_pass.draw_indexed(
             state.material.get_index_range(),
             0,
-            0..state.instance_scheme.len() as u32,
+            state.material.get_instance_range(),
         );
 
         drop(render_pass);
