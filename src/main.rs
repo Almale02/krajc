@@ -115,6 +115,29 @@ fn startup(
     mut world: EcsWorld,
     mut render: Res<RenderManagerResource>,
 ) {
+    let a = TextureMaterialInstance::from_pos(Vec3::new(45., 3., 656.));
+
+    let start = Instant::now();
+
+    a.to_raw();
+
+    println!("conversion took: {:?}", start.elapsed());
+
+    let start = Instant::now();
+    let vec = (0..(500_000 * (52 / 13)))
+        .into_iter()
+        .map(|arg| {
+            let mut cloned = arg;
+            for _ in 0..100 {
+                cloned *= 3;
+                cloned /= 3;
+            }
+            arg + cloned
+        })
+        .collect::<Vec<u32>>();
+    println!("test took: {:?}", start.elapsed());
+    dbg!(vec[23]);
+
     dbg!("ran startup");
     let mut entities: Vec<(TextureMaterialInstance,)> = vec![];
 
