@@ -102,43 +102,41 @@ fn main() {
     run().block_on();
 }
 
+#[derive(Default, Comp)]
 struct Vel(Vec3);
+#[derive(Default, Comp)]
 struct Position(Vec3);
 #[derive(Default, Comp)]
 struct Health(u32);
 
 #[system_fn(RuntimeEngineLoadSchedule)]
-fn startup(startup: SchedData<RuntimeEngineLoadScheduleData>, mut world: EcsWorld) {
+fn startup(
+    query: SystemQuery<Read<TextureMaterialInstance>>,
+    mut world: EcsWorld,
+    mut render: Res<RenderManagerResource>,
+) {
     dbg!("ran startup");
-    let mut entities_1 = vec![];
-    let mut entities_2 = vec![];
+    let mut entities: Vec<(TextureMaterialInstance,)> = vec![];
 
-    for i in 0..9999 {
-        entities_1.push((
-            Vel(Vec3 {
-                x: i as f32,
-                y: -i as f32,
-                z: 0.,
-            }),
-            Position(Vec3 {
-                x: -i as f32,
-                y: i as f32,
-                z: 2. * i as f32,
-            }),
-        ))
+    let width = 999;
+    let height = 999;
+
+    for y in 0..height {
+        for x in 0..width {
+            entities.push((TextureMaterialInstance::from_pos(Vec3::new(
+                x as f32, 0., y as f32,
+            )),))
+        }
     }
-    for i in 0..9999 {
-        entities_2.push((
-            Vel(Vec3 {
-                x: i as f32,
-                y: -(i as f32),
-                z: 0.,
-            }),
-            Health(i),
-        ))
-    }
-    world.extend(entities_1);
-    world.extend(entities_2);
+
+    dbg!(entities.len());
+    world.extend(entities);
+
+    let render = render.get_static_mut();
+
+    let query2 = query.query().iter(&*world).collect::<Vec<_>>();
+    //let instance_data = query2.iter().map(|arg| arg.to_raw()).collect::<Vec<_>>();
+    render.material.set_instance_value_ref(query2);
 }
 
 #[system_fn(RuntimeUpdateSchedule)]
@@ -158,7 +156,7 @@ fn fps_logger(
         dbg!(*prev_full_sec);
 
         let test = TextureMaterialInstance::from_pos(render_state.camera.position.into());
-        world.push((test,));
+        //world.push((test,));
 
         dbg!(render_state.camera_uniform.view_pos);
     }
@@ -321,7 +319,7 @@ impl From<f32> for Float {
 }
 
 #[repr(C)]
-#[derive(PartialEq, Debug, Copy, Clone)]
+#[derive(PartialEq, Debug, Copy, Clone, Default)]
 pub struct Vec3 {
     pub x: f32,
     pub y: f32,

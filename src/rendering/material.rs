@@ -1,5 +1,6 @@
-use std::ops::Range;
+use std::{any::Any, ops::Range, time::Instant};
 
+use hal::Instance;
 use krajc::{system_fn, system_fn_non_expand, Comp};
 use legion::{
     query::{ComponentFilter, EntityFilterTuple, Passthrough},
@@ -61,16 +62,41 @@ impl TextureMaterial {
     }
     pub fn set_instance_value(&'static mut self, data: Vec<TextureMaterialInstance>) {
         self.instance_count = data.len() as u32;
-        self.instance_buffer.set_data_vec(
-            data.iter()
-                .map(TextureMaterialInstance::to_raw)
-                .collect::<Vec<_>>(),
-        );
+
+        let start = Instant::now();
+
+        let mut new = Vec::<RawTextureMaterialInstance>::new();
+
+        for i in data {
+            new.push(i.to_raw());
+        }
+
+        dbg!(start.elapsed());
+        self.instance_buffer.set_data_vec(new);
     }
     pub fn set_instance_value_ref(&'static mut self, data: Vec<&TextureMaterialInstance>) {
         self.instance_count = data.len() as u32;
-        self.instance_buffer
-            .set_data_vec(data.iter().map(|arg| arg.to_raw()).collect::<Vec<_>>());
+        let iter_start = Instant::now();
+
+        let iter_part = data.iter();
+
+        println!("iter_start took {:?}", iter_start.elapsed());
+
+        let map_start = Instant::now();
+
+        let map_part = iter_part.map(|arg| arg.to_raw());
+
+        println!("map took {:?}", map_start.elapsed());
+
+        let collect_start = Instant::now();
+
+        let collect_part = map_part.collect::<Vec<_>>();
+
+        println!("collect took {:?}", collect_start.elapsed());
+
+        println!("everything took {:?}", iter_start.elapsed());
+
+        self.instance_buffer.set_data_vec(collect_part);
     }
 }
 
@@ -80,12 +106,11 @@ pub fn update_texture_material(
     mut render: Res<RenderManagerResource>,
     world: EcsWorld,
 ) {
-    let render = render.get_static_mut();
+    /*let render = render.get_static_mut();
 
     let query2 = query.query().iter(&*world).collect::<Vec<_>>();
     //let instance_data = query2.iter().map(|arg| arg.to_raw()).collect::<Vec<_>>();
-    dbg!(query2.last());
-    render.material.set_instance_value_ref(query2);
+    render.material.set_instance_value_ref(query2);*/
 }
 
 impl MaterialGeneric for TextureMaterial {
