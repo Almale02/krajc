@@ -1,13 +1,10 @@
-use std::{
-    ops::{Deref, DerefMut},
-};
+use std::ops::{Deref, DerefMut};
 
-use crate::{
-    engine_runtime::{
-        EngineRuntime,
-    },
-    typed_addr::TypedAddr,
-};
+use crate::{engine_runtime::EngineRuntime, typed_addr::TypedAddr};
+
+use super::system_param::SystemParamFilter;
+
+impl<T: 'static + EngineResource> SystemParamFilter for Res<T> {}
 
 pub struct Res<T>
 where

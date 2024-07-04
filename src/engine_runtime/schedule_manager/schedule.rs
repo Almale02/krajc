@@ -31,6 +31,7 @@ pub trait ScheduleRunnable {
     fn run(&mut self, runtime: &'static mut EngineRuntime, schedule_state: usize);
     fn predicate(&self, runtime: &'static EngineRuntime, schedule_state: usize) -> bool;
     fn name(&self) -> &'static str;
+    fn setup_filter(&mut self, runtime: &'static mut EngineRuntime, schedule_state: usize);
 }
 
 #[macro_export]

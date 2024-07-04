@@ -1,8 +1,8 @@
-use std::{ops::{Deref, DerefMut}};
+use std::ops::{Deref, DerefMut};
 
-use crate::{typed_addr::TypedAddr};
+use crate::typed_addr::TypedAddr;
 
-use super::{system_param::SystemParam};
+use super::system_param::{SystemParalellFilter, SystemParam};
 
 pub struct Local<T>
 where
@@ -26,8 +26,19 @@ impl<T: Default> DerefMut for Local<T> {
 impl<T: Default> From<SystemParam> for Local<T> {
     fn from(value: SystemParam) -> Self {
         let map = value.engine.system_locals.entry(value.fn_name).or_default();
-        
+
         let any = map.entry(value.position).or_insert(Box::<T>::default());
-        Self {addr: TypedAddr::new_with_ref(any.downcast_mut::<T>().unwrap())}
+        Self {
+            addr: TypedAddr::new_with_ref(any.downcast_mut::<T>().unwrap()),
+        }
+    }
+}
+
+impl<T: Default> SystemParalellFilter for Local<T> {
+    fn filter_against_param(&self, param: Box<dyn std::any::Any>) -> bool {
+        true
+    }
+    fn get_filterable(&self) -> Box<dyn std::any::Any> {
+        Box::default()
     }
 }

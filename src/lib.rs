@@ -122,7 +122,7 @@ pub fn system_fn(attr: TokenStream, item: TokenStream) -> TokenStream {
         #[allow(macro_expanded_macro_exports_accessed_by_absolute_paths)]
         macro_rules! #fn_name {
             ($runtime: expr) => {
-                $runtime.get_resource::<#type_param>().register(Box::new( ("#fn_name", Box::new(#fn_name) as Box<dyn Fn(#macro_invocation)>)))
+                $runtime.get_resource::<#type_param>().register(Box::new( ("#fn_name", Box::new(#fn_name) as Box<dyn Fn(#macro_invocation)>, Vec::default())))
             };
         }
 

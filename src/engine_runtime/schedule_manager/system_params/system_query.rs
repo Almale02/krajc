@@ -4,12 +4,14 @@ use std::{
 };
 
 use legion::{
-    internals::{iter::indexed::TrustedRandomAccessExt, query::view::IntoView, world::Comp},
-    query::{DefaultFilter, DynamicFilter, EntityFilter, EntityFilterTuple, Passthrough},
+    internals::query::view::IntoView,
+    query::{DefaultFilter, EntityFilter, EntityFilterTuple, Passthrough, View},
     IntoQuery, Query, World,
 };
 
-use super::system_param::SystemParam;
+use crate::Position;
+
+use super::system_param::{SystemParalellFilter, SystemParam};
 
 pub struct SystemQuery<
     Fetch,
@@ -62,12 +64,27 @@ where
         }
     }
 }
+impl<Fetch, Filter, T> SystemParalellFilter for SystemQuery<Fetch, Filter, T>
+where
+    Fetch: IntoView + DefaultFilter,
+    Filter: EntityFilter,
+    T: BitAnd<Filter> + EntityFilter,
+    <T as BitAnd<Filter>>::Output: EntityFilter,
+{
+    fn filter_against_param(&self, param: Box<dyn std::any::Any>) -> bool {
+        let a = Fetch::View::reads_types();
+        todo!()
+    }
 
-trait QueryFilterable {}
+    fn get_filterable(&self) -> Box<dyn std::any::Any> {
+        todo!()
+    } 
+}
 
 pub struct EcsWorld {
     world: &'static mut World,
 }
+impl SystemParamFilter for EcsWorld {}
 impl From<SystemParam> for EcsWorld {
     fn from(value: SystemParam) -> Self {
         Self {

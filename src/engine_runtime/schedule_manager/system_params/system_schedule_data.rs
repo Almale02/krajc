@@ -2,7 +2,7 @@ use std::ops::{Deref, DerefMut};
 
 use crate::typed_addr::TypedAddr;
 
-use super::system_param::SystemParam;
+use super::system_param::{SystemParam, SystemParamFilter};
 
 pub struct SchedData<T: 'static> {
     addr: TypedAddr<T>,
@@ -26,3 +26,4 @@ impl<T> From<SystemParam> for SchedData<T> {
         }
     }
 }
+impl<T> SystemParamFilter for SchedData<T> {}

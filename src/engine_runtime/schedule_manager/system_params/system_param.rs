@@ -1,3 +1,5 @@
+use std::any::Any;
+
 use crate::{
     engine_runtime::{schedule_manager::schedule::ScheduleRunnable, EngineRuntime},
     typed_addr::TypedAddr,
@@ -12,6 +14,11 @@ pub struct SystemParam {
     pub fn_name: &'static str,
 }
 
+pub trait SystemParalellFilter {
+    fn filter_against_param(&self, param: Box<dyn Any>) -> bool;
+    fn get_filterable(&self) -> Box<dyn Any>;
+}
+
 impl<T: EngineResource> From<SystemParam> for Res<T> {
     fn from(value: SystemParam) -> Self {
         let engine = value.engine;
@@ -19,18 +26,16 @@ impl<T: EngineResource> From<SystemParam> for Res<T> {
             addr: TypedAddr::<_>::new(0),
         };
         new_self.find_addr(engine);
+
         return new_self;
     }
 }
 
-trait IntoSchedRun {
-    fn as_sched_run_box(&'static self) -> Box<dyn ScheduleRunnable>;
-}
 macro_rules! impl_schedule_runnable {
     ($($param:ident),*) => {
-        impl<$($param),*> ScheduleRunnable for (&'static str, Box<dyn Fn($($param),*)>)
+        impl<$($param),*> ScheduleRunnable for (&'static str, Box<dyn Fn($($param),*)>, Vec<Box<dyn Any>>)
         where
-            $($param: From<SystemParam>),*
+            $($param: From<SystemParam> + SystemParalellFilter + 'static),*
         {
             fn run(&mut self, runtime: &'static mut EngineRuntime, schedule_state: usize) {
                 let runtime = TypedAddr::<EngineRuntime>::new(runtime as *mut _ as usize);
@@ -41,16 +46,32 @@ macro_rules! impl_schedule_runnable {
                         std::convert::Into::<$param>::into(
                         {
                             position += 1;
-                            SystemParam {
+                            let a = SystemParam {
                                 engine: runtime.get(),
                                 schedule_data: schedule_state,
                                 fn_name: self.name(),
                                 position,
-                            }
-
+                            };
+                            a
                         }),
                     )*
                 );
+            }
+            fn setup_filter(&mut self, runtime: &'static mut EngineRuntime, schedule_state: usize) {
+                let runtime = TypedAddr::<EngineRuntime>::new(runtime as *mut _ as usize);
+                let mut position = 0;
+                    $(
+                        position += 1;
+                        let a = std::convert::Into::<$param>::into(SystemParam {
+                            engine: runtime.get(),
+                            schedule_data: schedule_state,
+                            fn_name: self.name(),
+                            position,
+                        });
+                        self.2.push(Box::new(a));
+
+                    )*
+
             }
             fn predicate(&self, _runtime: &'static EngineRuntime, _schedule_state: usize) -> bool {
                 true

@@ -1,10 +1,7 @@
 use krajc::{system_fn, system_fn2, Comp};
 use legion::{
-    component,
-    internals::{query::view::IntoView, storage::component, world::Comp},
-    query::{Changed, ComponentFilter, EntityFilter, EntityFilterTuple, Passthrough},
-    storage::Component,
-    Entity, Query, Read,
+    query::{EntityFilterTuple, Passthrough},
+    Read,
 };
 
 type QueryFilter<A, B = Passthrough> = EntityFilterTuple<A, B>;
@@ -12,13 +9,7 @@ type QueryFilter<A, B = Passthrough> = EntityFilterTuple<A, B>;
 use pollster::FutureExt;
 use typed_addr::TypedAddr;
 
-use std::{
-    collections::{btree_map::VacantEntry, HashMap},
-    hash::Hash,
-    ops::{Deref, DerefMut},
-    rc::Rc,
-    time::Instant,
-};
+use std::{collections::HashMap, hash::Hash, ops::Deref, time::Instant};
 
 use cgmath::{Point3, Vector3};
 
@@ -115,29 +106,6 @@ fn startup(
     mut world: EcsWorld,
     mut render: Res<RenderManagerResource>,
 ) {
-    let a = TextureMaterialInstance::from_pos(Vec3::new(45., 3., 656.));
-
-    let start = Instant::now();
-
-    a.to_raw();
-
-    println!("conversion took: {:?}", start.elapsed());
-
-    let start = Instant::now();
-    let vec = (0..(500_000 * (52 / 13)))
-        .into_iter()
-        .map(|arg| {
-            let mut cloned = arg;
-            for _ in 0..100 {
-                cloned *= 3;
-                cloned /= 3;
-            }
-            arg + cloned
-        })
-        .collect::<Vec<u32>>();
-    println!("test took: {:?}", start.elapsed());
-    dbg!(vec[23]);
-
     dbg!("ran startup");
     let mut entities: Vec<(TextureMaterialInstance,)> = vec![];
 
