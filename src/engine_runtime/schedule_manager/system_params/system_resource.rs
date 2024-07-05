@@ -1,10 +1,26 @@
-use std::ops::{Deref, DerefMut};
+use std::{
+    any::TypeId,
+    ops::{Deref, DerefMut},
+};
 
 use crate::{engine_runtime::EngineRuntime, typed_addr::TypedAddr};
 
-use super::system_param::SystemParamFilter;
+use super::system_param::SystemParalellFilter;
 
-impl<T: 'static + EngineResource> SystemParamFilter for Res<T> {}
+impl<T: 'static + EngineResource> SystemParalellFilter for Res<T> {
+    fn filter_against_param(&self, param: Box<dyn std::any::Any>) -> bool {
+        match param.downcast_ref::<ResFilterable>() {
+            Some(other) => other.0 != TypeId::of::<T>(),
+            None => todo!(),
+        }
+    }
+
+    fn get_filterable(&self) -> Box<dyn std::any::Any> {
+        Box::new(ResFilterable(TypeId::of::<T>()))
+    }
+}
+
+pub struct ResFilterable(pub TypeId);
 
 pub struct Res<T>
 where

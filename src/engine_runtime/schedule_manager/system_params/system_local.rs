@@ -39,6 +39,6 @@ impl<T: Default> SystemParalellFilter for Local<T> {
         true
     }
     fn get_filterable(&self) -> Box<dyn std::any::Any> {
-        Box::default()
+        Box::new(0)
     }
 }

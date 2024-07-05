@@ -2,7 +2,7 @@ use std::ops::{Deref, DerefMut};
 
 use crate::typed_addr::TypedAddr;
 
-use super::system_param::{SystemParam, SystemParamFilter};
+use super::system_param::{SystemParalellFilter, SystemParam};
 
 pub struct SchedData<T: 'static> {
     addr: TypedAddr<T>,
@@ -26,4 +26,12 @@ impl<T> From<SystemParam> for SchedData<T> {
         }
     }
 }
-impl<T> SystemParamFilter for SchedData<T> {}
+impl<T> SystemParalellFilter for SchedData<T> {
+    fn filter_against_param(&self, param: Box<dyn std::any::Any>) -> bool {
+        true
+    }
+
+    fn get_filterable(&self) -> Box<dyn std::any::Any> {
+        Box::new(0)
+    }
+}
