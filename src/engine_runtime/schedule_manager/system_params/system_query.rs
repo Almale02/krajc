@@ -1,9 +1,9 @@
 use std::{
+    collections::HashSet,
     marker::PhantomData,
     ops::{BitAnd, Deref, DerefMut},
 };
 
-use env_logger::WriteStyle;
 use legion::{
     internals::query::view::IntoView,
     query::{DefaultFilter, EntityFilter, EntityFilterTuple, Passthrough, View},
@@ -11,9 +11,7 @@ use legion::{
     IntoQuery, Query, World,
 };
 
-use crate::Position;
-
-use super::system_param::{SystemParalellFilter, SystemParam};
+use super::system_param::{IntoSystemParalellFilter, SystemParalellFilter, SystemParam};
 
 pub struct SystemQueryFilterable {
     pub reads: Vec<ComponentTypeId>,
@@ -23,6 +21,25 @@ pub struct SystemQueryFilterable {
 impl SystemQueryFilterable {
     pub fn new(reads: Vec<ComponentTypeId>, writes: Vec<ComponentTypeId>) -> Self {
         Self { reads, writes }
+    }
+}
+
+impl SystemParalellFilter for SystemQueryFilterable {
+    fn filter_against_param(&self, other: &Box<(dyn SystemParalellFilter + 'static)>) -> bool {
+        match other.downcast_ref::<SystemQueryFilterable>() {
+            Some(x) => {
+                let reads = self.reads.clone().into_iter().collect::<HashSet<_>>();
+                let writes = self.writes.clone().into_iter().collect::<HashSet<_>>();
+
+                let other_reads = &x.reads.clone().into_iter().collect::<HashSet<_>>();
+                let other_writes = &x.writes.clone().into_iter().collect::<HashSet<_>>();
+
+                reads.is_disjoint(other_writes)
+                    && writes.is_disjoint(other_writes)
+                    && other_reads.is_disjoint(&writes)
+            }
+            None => true,
+        }
     }
 }
 
@@ -77,43 +94,14 @@ where
         }
     }
 }
-impl<Fetch, Filter, T> SystemParalellFilter for SystemQuery<Fetch, Filter, T>
+impl<Fetch, Filter, T> IntoSystemParalellFilter for SystemQuery<Fetch, Filter, T>
 where
     Fetch: IntoView + DefaultFilter,
     Filter: EntityFilter,
     T: BitAnd<Filter> + EntityFilter,
     <T as BitAnd<Filter>>::Output: EntityFilter,
 {
-    fn filter_against_param(&self, other: Box<dyn std::any::Any>) -> bool {
-        match other.downcast_ref::<SystemQueryFilterable>() {
-            Some(x) => {
-                let reads = Fetch::View::reads_types_vec();
-                let writes = Fetch::View::writes_types_vec();
-
-                let other_reads = &x.reads;
-                let other_writes = &x.writes;
-
-                for this_read in reads {
-                    for other_write in other_writes {
-                        if this_read.type_id() == other_write.type_id() {
-                            return false;
-                        }
-                    }
-                }
-                for this_write in writes {
-                    for other_write in other_writes {
-                        if this_write.type_id() == other_write.type_id() {
-                            return false;
-                        }
-                    }
-                }
-                return true;
-            }
-            None => true,
-        }
-    }
-
-    fn get_filterable(&self) -> Box<dyn std::any::Any> {
+    fn get_filterable(&self) -> Box<dyn SystemParalellFilter> {
         Box::new(SystemQueryFilterable::new(
             Fetch::View::reads_types_vec(),
             Fetch::View::writes_types_vec(),
@@ -121,16 +109,19 @@ where
     }
 }
 
+pub struct EcsWorldFilterable {}
+impl SystemParalellFilter for EcsWorldFilterable {
+    fn filter_against_param(&self, param: &Box<(dyn SystemParalellFilter + 'static)>) -> bool {
+        false
+    }
+}
+
 pub struct EcsWorld {
     world: &'static mut World,
 }
-impl SystemParalellFilter for EcsWorld {
-    fn filter_against_param(&self, param: Box<dyn std::any::Any>) -> bool {
-        false
-    }
-
-    fn get_filterable(&self) -> Box<dyn std::any::Any> {
-        Box::new(0)
+impl IntoSystemParalellFilter for EcsWorld {
+    fn get_filterable(&self) -> Box<dyn SystemParalellFilter> {
+        Box::new(EcsWorldFilterable {})
     }
 }
 impl From<SystemParam> for EcsWorld {

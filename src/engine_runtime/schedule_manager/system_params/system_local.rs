@@ -2,7 +2,7 @@ use std::ops::{Deref, DerefMut};
 
 use crate::typed_addr::TypedAddr;
 
-use super::system_param::{SystemParalellFilter, SystemParam};
+use super::system_param::{IntoSystemParalellFilter, SystemParalellFilter, SystemParam};
 
 pub struct Local<T>
 where
@@ -34,11 +34,15 @@ impl<T: Default> From<SystemParam> for Local<T> {
     }
 }
 
-impl<T: Default> SystemParalellFilter for Local<T> {
-    fn filter_against_param(&self, param: Box<dyn std::any::Any>) -> bool {
+struct LocalFilterable {}
+impl SystemParalellFilter for LocalFilterable {
+    fn filter_against_param(&self, param: &Box<(dyn SystemParalellFilter + 'static)>) -> bool {
         true
     }
-    fn get_filterable(&self) -> Box<dyn std::any::Any> {
-        Box::new(0)
+}
+
+impl<T: Default> IntoSystemParalellFilter for Local<T> {
+    fn get_filterable(&self) -> Box<dyn SystemParalellFilter> {
+        Box::new(LocalFilterable {})
     }
 }

@@ -5,22 +5,24 @@ use std::{
 
 use crate::{engine_runtime::EngineRuntime, typed_addr::TypedAddr};
 
-use super::system_param::SystemParalellFilter;
+use super::system_param::{IntoSystemParalellFilter, SystemParalellFilter};
 
-impl<T: 'static + EngineResource> SystemParalellFilter for Res<T> {
-    fn filter_against_param(&self, param: Box<dyn std::any::Any>) -> bool {
-        match param.downcast_ref::<ResFilterable>() {
-            Some(other) => other.0 != TypeId::of::<T>(),
-            None => todo!(),
-        }
-    }
-
-    fn get_filterable(&self) -> Box<dyn std::any::Any> {
+impl<T: 'static + EngineResource> IntoSystemParalellFilter for Res<T> {
+    fn get_filterable(&self) -> Box<dyn SystemParalellFilter> {
         Box::new(ResFilterable(TypeId::of::<T>()))
     }
 }
 
 pub struct ResFilterable(pub TypeId);
+
+impl SystemParalellFilter for ResFilterable {
+    fn filter_against_param(&self, param: &Box<(dyn SystemParalellFilter + 'static)>) -> bool {
+        match param.downcast_ref::<ResFilterable>() {
+            Some(other) => other.0 != self.0,
+            None => todo!(),
+        }
+    }
+}
 
 pub struct Res<T>
 where

@@ -1,5 +1,7 @@
 use crate::{engine_runtime::EngineRuntime, typed_addr::TypedAddr, ENGINE_RUNTIME};
 
+use super::system_params::system_param::SystemParalellFilter;
+
 pub struct Schedule<STATE> {
     pub schedule_name: String,
     pub actions: Vec<Box<dyn ScheduleRunnable>>,
@@ -32,6 +34,7 @@ pub trait ScheduleRunnable {
     fn predicate(&self, runtime: &'static EngineRuntime, schedule_state: usize) -> bool;
     fn name(&self) -> &'static str;
     fn setup_filter(&mut self, runtime: &'static mut EngineRuntime, schedule_state: usize);
+    fn get_params_filters(&self) -> &Vec<Box<dyn SystemParalellFilter>>;
 }
 
 #[macro_export]

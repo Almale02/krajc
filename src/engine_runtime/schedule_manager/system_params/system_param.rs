@@ -1,5 +1,7 @@
 use std::any::Any;
 
+use mopa::mopafy;
+
 use crate::{
     engine_runtime::{schedule_manager::schedule::ScheduleRunnable, EngineRuntime},
     typed_addr::TypedAddr,
@@ -14,9 +16,13 @@ pub struct SystemParam {
     pub fn_name: &'static str,
 }
 
-pub trait SystemParalellFilter {
-    fn filter_against_param(&self, param: Box<dyn Any>) -> bool;
-    fn get_filterable(&self) -> Box<dyn Any>;
+pub trait IntoSystemParalellFilter {
+    fn get_filterable(&self) -> Box<dyn SystemParalellFilter>;
+}
+
+mopa::mopafy!(SystemParalellFilter);
+pub trait SystemParalellFilter: mopa::Any {
+    fn filter_against_param(&self, param: &Box<dyn SystemParalellFilter>) -> bool;
 }
 
 impl<T: EngineResource> From<SystemParam> for Res<T> {
@@ -33,9 +39,9 @@ impl<T: EngineResource> From<SystemParam> for Res<T> {
 
 macro_rules! impl_schedule_runnable {
     ($($param:ident),*) => {
-        impl<$($param),*> ScheduleRunnable for (&'static str, Box<dyn Fn($($param),*)>, Vec<Box<dyn Any>>)
+        impl<$($param),*> ScheduleRunnable for (&'static str, Box<dyn Fn($($param),*)>, Vec<Box<dyn SystemParalellFilter>>)
         where
-            $($param: From<SystemParam> + SystemParalellFilter + 'static),*
+            $($param: From<SystemParam> + IntoSystemParalellFilter + 'static),*
         {
             fn run(&mut self, runtime: &'static mut EngineRuntime, schedule_state: usize) {
                 let runtime = TypedAddr::<EngineRuntime>::new(runtime as *mut _ as usize);
@@ -68,7 +74,7 @@ macro_rules! impl_schedule_runnable {
                             fn_name: self.name(),
                             position,
                         });
-                        self.2.push(Box::new(a));
+                        self.2.push(a.get_filterable());
 
                     )*
 
@@ -78,6 +84,9 @@ macro_rules! impl_schedule_runnable {
             }
             fn name(&self) -> &'static str {
                 self.0
+            }
+            fn get_params_filters(&self) -> &Vec<Box<dyn SystemParalellFilter>> {
+                &self.2
             }
         }
     };
