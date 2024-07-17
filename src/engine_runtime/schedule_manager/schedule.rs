@@ -50,6 +50,18 @@ pub trait ScheduleRunnable {
     fn get_params_filters(&self) -> &Vec<Box<dyn SystemParalellFilter>>;
 }
 
+pub fn single_thread_scheduler(
+    engine: &'static mut EngineRuntime,
+    actions: &mut Vec<Box<dyn ScheduleRunnable>>,
+    state: usize,
+) {
+    for action in actions.iter_mut() {
+        action.run(dupe(engine), state);
+    }
+    //let a = calc_dep_graph(&mut self.actions, dupe(engine));
+    let thread_num = thread::available_parallelism().unwrap().into_integer() - 1;
+    dbg!(thread_num);
+}
 #[macro_export]
 macro_rules! implement_schedule {
     ($type: ty) => {
@@ -64,6 +76,12 @@ macro_rules! implement_schedule {
             }
 
             pub fn execute(&'static mut self, engine: &'static mut EngineRuntime) {
+                dbg!(engine.paralellism);
+                if !engine.paralellism {
+                    single_thread_scheduler(engine, &mut self.actions, self.schedule_state.addr);
+                    return;
+                }
+
                 let (main_tx, thread_rx) = flume::unbounded();
                 let (thread_tx, main_rx) = flume::unbounded();
 
@@ -163,6 +181,7 @@ macro_rules! implement_schedule {
                 for join in thread_join {
                     join.join();
                 }
+                //dbg!(pre.elapsed());
             }
             pub fn register(&mut self, action: Box<dyn ScheduleRunnable>) {
                 self.actions.push(action);
@@ -223,7 +242,7 @@ pub fn calc_dep_graph(
             });
         }
     }
-    dbg!(&groups);
+    //dbg!(&groups);
 
     for (i, deps) in dep_graph.iter_mut_totallysafe() {
         for (j, other_deps) in dep_graph.iter_mut_totallysafe() {

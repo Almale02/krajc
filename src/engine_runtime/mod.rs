@@ -1,3 +1,4 @@
+use core::panic;
 use std::{
     any::{Any, TypeId},
     collections::HashMap,
@@ -19,6 +20,7 @@ pub mod engine_state_manager;
 pub mod schedule_manager;
 
 pub struct EngineRuntime {
+    pub paralellism: bool,
     pub state: EngineStateManager,
     pub static_resource_map: HashMap<TypeId, usize>,
     pub system_locals: HashMap<&'static str, HashMap<u8, Box<dyn Any>>>,
@@ -35,6 +37,14 @@ impl Default for EngineRuntime {
 impl EngineRuntime {
     pub fn new() -> Self {
         Self {
+            paralellism: {match std::env::var("KRAJC_PARALLELISM") {
+                Ok(value) => {match value.as_str() {
+                    "true" => true,
+                    "false" => false,
+                    _ => panic!("invalid value for env variable KRAJC_PARALLELISM, value should be 'true' or 'false'")
+                }},
+                Err(_) => true/*{true}*/,
+            }},
             state: EngineStateManager {
                 generic: GenericStateManager::new(),
             },
@@ -62,14 +72,12 @@ impl EngineRuntime {
     pub fn get_resource<T: EngineResource>(&mut self) -> &'static mut T {
         let x = self.static_resource_map.get(&TypeId::of::<T>());
 
-        let address;
-
-        if x.is_none() {
+        let address = if x.is_none() {
             let addr: TypedAddr<_> = T::init(self).into();
-            address = addr.addr;
+            addr.addr
         } else {
-            address = *x.unwrap();
-        }
+            *x.unwrap()
+        };
 
         TypedAddr::new(address).get()
     }

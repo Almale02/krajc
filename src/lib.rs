@@ -1,11 +1,6 @@
-
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
-use syn::{
-    parse::Parser,
-    parse_macro_input, AttributeArgs, FnArg, ItemFn, Pat,
-    PatType, Result,
-};
+use syn::{parse::Parser, parse_macro_input, AttributeArgs, FnArg, ItemFn, Pat, PatType, Result};
 extern crate proc_macro;
 
 type TokenStream2 = proc_macro2::TokenStream;

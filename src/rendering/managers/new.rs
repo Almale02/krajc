@@ -83,7 +83,7 @@ impl EngineRuntime {
         let instance_buffer = ManagedBufferInstanceHandle::<InstanceBufferType>::new_with_size(
             "instance_buffer".to_owned(),
             //4092u64.pow(2),
-            268435456,
+            9000,
         );
 
         let camera_buffer = ManagedBufferInstanceHandle::<UniformBufferType>::new_with_init(

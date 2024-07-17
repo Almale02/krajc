@@ -1,7 +1,7 @@
 #![allow(invalid_reference_casting)]
 
 use crate::rendering::systems::general::update_rendering;
-use krajc::{system_fn, system_fn2, Comp};
+use krajc::{system_fn, Comp};
 use legion::{
     query::{EntityFilterTuple, Passthrough},
     Query, Read, Write,
@@ -111,8 +111,8 @@ fn startup(
     dbg!("ran startup");
     let mut entities: Vec<(TextureMaterialInstance,)> = vec![];
 
-    let width = 999;
-    let height = 999;
+    let width = 9;
+    let height = 9;
 
     for y in 0..height {
         for x in 0..width {
@@ -129,7 +129,11 @@ fn startup(
 
     let query2 = query.query().iter(&*world).collect::<Vec<_>>();
     //let instance_data = query2.iter().map(|arg| arg.to_raw()).collect::<Vec<_>>();
-    render.material.set_instance_value_ref(query2);
+    dupe(render).material.set_instance_value_ref(query2);
+
+    let mesh = Mesh::build_cube(&render.device, 1., 1., 1.);
+
+    render.material.set_mesh(mesh);
 }
 
 #[system_fn(RuntimeUpdateSchedule)]

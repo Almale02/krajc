@@ -38,8 +38,4 @@ pub fn update_rendering(
         0,
         bytemuck::cast_slice(&[new_aspect_uniform]),
     );
-
-    let mesh = Mesh::build_cube(&render_state.device, 1., 1., 1.);
-
-    render_state.material.set_mesh(mesh);
 }
