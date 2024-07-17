@@ -1,15 +1,23 @@
+#![allow(invalid_reference_casting)]
+
+use crate::rendering::systems::general::update_rendering;
 use krajc::{system_fn, system_fn2, Comp};
 use legion::{
     query::{EntityFilterTuple, Passthrough},
-    Read,
+    Query, Read, Write,
 };
 
 type QueryFilter<A, B = Passthrough> = EntityFilterTuple<A, B>;
 
 use pollster::FutureExt;
-use typed_addr::TypedAddr;
+use typed_addr::{dupe, TypedAddr};
 
-use std::{collections::HashMap, hash::Hash, ops::Deref, time::Instant};
+use std::{
+    collections::HashMap,
+    hash::Hash,
+    ops::{Deref, DerefMut},
+    time::Instant,
+};
 
 use cgmath::{Point3, Vector3};
 
@@ -18,6 +26,7 @@ use engine_runtime::{
         runtime_schedule::{
             RuntimeEngineLoadScheduleData, RuntimeUpdateSchedule, RuntimeUpdateScheduleData,
         },
+        schedule::ScheduleRunnable,
         system_params::{
             system_local::Local,
             system_query::{EcsWorld, SystemQuery},
@@ -48,9 +57,9 @@ use crate::{
 pub static mut ENGINE_RUNTIME: TypedAddr<EngineRuntime> = TypedAddr::<EngineRuntime>::default();
 
 pub mod ecs;
+
 pub mod engine_runtime;
 ///#[forbid(clippy::unwrap_used)]
-#[allow(invalid_reference_casting)]
 pub mod rendering;
 pub mod typed_addr;
 
@@ -92,13 +101,6 @@ impl ManagedBufferGeneric for InstanceBufferType {
 fn main() {
     run().block_on();
 }
-
-#[derive(Default, Comp)]
-struct Vel(Vec3);
-#[derive(Default, Comp)]
-struct Position(Vec3);
-#[derive(Default, Comp)]
-struct Health(u32);
 
 #[system_fn(RuntimeEngineLoadSchedule)]
 fn startup(
@@ -153,42 +155,6 @@ fn fps_logger(
     }
 }
 
-#[system_fn(RuntimeUpdateSchedule)]
-fn update_rendering(
-    mut render_state: Res<RenderManagerResource>,
-    update: SchedData<RuntimeUpdateScheduleData>,
-) {
-    let render_state = render_state.get_static_mut();
-
-    render_state
-        .camera_controller
-        .update_camera(&mut render_state.camera, update.dt.as_secs_f64());
-    render_state
-        .camera_uniform
-        .update_view_proj(&render_state.camera, &render_state.projection);
-
-    render_state
-        .camera_buffer
-        .set_data(*render_state.camera_uniform);
-
-    render_state.queue.write_buffer(
-        &render_state.camera_buffer_actual,
-        0,
-        bytemuck::cast_slice(&[*render_state.camera_uniform]),
-    );
-
-    let new_aspect_uniform = AspectUniform::from_size(*render_state.size);
-    render_state.queue.write_buffer(
-        &render_state.aspect_buffer,
-        0,
-        bytemuck::cast_slice(&[new_aspect_uniform]),
-    );
-
-    let mesh = Mesh::build_cube(&render_state.device, 1., 1., 1.);
-
-    render_state.material.set_mesh(mesh);
-}
-
 pub async fn run() {
     let mut runtime = EngineRuntime::init();
 
@@ -224,7 +190,7 @@ pub async fn run() {
     let window_ref = render_states.window.get_ref();
 
     let load = runtime.get_resource::<RuntimeEngineLoadSchedule>();
-    load.execute();
+    load.execute(dupe(runtime));
 
     render_states.material.register_systems(&mut runtime);
     event_loop.run(move |event, _window_target, control_flow| match event {
@@ -521,3 +487,59 @@ impl<T: Clone> Clone for Lateinit<T> {
         }
     }
 }
+
+/*#[system_fn(RuntimeEngineLoadSchedule)]
+fn test_a(_q: SystemQuery<(Read<A>, Write<A>)>) {}
+fn test_b(_q: SystemQuery<(Read<A>, Write<A>)>) {}
+fn test_c(_q: SystemQuery<(Read<A>, Write<A>)>) {}
+fn test_d(_q: SystemQuery<(Read<A>, Write<A>)>) {}
+fn test_e(_q: SystemQuery<(Read<A>, Write<A>)>) {}
+fn test_f(_q: SystemQuery<(Read<A>, Write<A>)>) {}
+fn test_g(_q: SystemQuery<(Read<A>, Write<A>)>) {}
+fn test_h(_q: SystemQuery<(Read<A>, Write<A>)>) {}
+
+#[derive(Comp, Default)]
+struct A {}
+#[derive(Comp, Default)]
+struct B {}
+#[derive(Comp, Default)]
+struct C {}
+#[derive(Comp, Default)]
+struct D {}
+#[derive(Comp, Default)]
+struct E {}
+#[derive(Comp, Default)]
+struct F {}
+#[derive(Comp, Default)]
+struct G {}
+#[derive(Comp, Default)]
+struct H {}*/
+
+pub struct ThreadRawPointer<T>(pub *mut T);
+impl<T> ThreadRawPointer<T> {
+    pub fn new(value: &T) -> ThreadRawPointer<T> {
+        ThreadRawPointer((value as *const T) as *mut T)
+    }
+}
+
+impl<T> Deref for ThreadRawPointer<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        unsafe {
+            let ptr: &mut T = &mut *self.0;
+            ptr
+        }
+    }
+}
+impl<T> DerefMut for ThreadRawPointer<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        unsafe {
+            let ptr: &mut T = &mut *self.0;
+            ptr
+        }
+    }
+}
+
+unsafe impl<T> Sync for ThreadRawPointer<T> {}
+unsafe impl<T> Send for ThreadRawPointer<T> {}

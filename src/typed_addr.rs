@@ -53,6 +53,8 @@ impl<T> TypedAddr<T> {
         Self::new(0)
     }
 }
-pub fn dupe<T>(value: &mut T) -> &'static mut T {
-    unsafe { std::mem::transmute(value as *mut T) }
+unsafe impl<T> Send for TypedAddr<T> {}
+
+pub fn dupe<T: ?Sized>(value: &T) -> &'static mut T {
+    unsafe { &mut *((value as *const T) as *mut T) }
 }

@@ -7,7 +7,10 @@ use crate::{
     typed_addr::TypedAddr,
 };
 
-use super::system_resource::{EngineResource, Res};
+use super::{
+    system_query::SystemQueryFilterable,
+    system_resource::{EngineResource, Res},
+};
 
 pub struct SystemParam {
     pub engine: &'static mut EngineRuntime,
@@ -22,6 +25,8 @@ pub trait IntoSystemParalellFilter {
 
 mopa::mopafy!(SystemParalellFilter);
 pub trait SystemParalellFilter: mopa::Any {
+    /// this is used for checking if 2 systems can run paralell, in other words they are compatible with each other
+    /// this returns true if two params are compatible, and false if they not, check the [SystemQueryFilterable][super::system_query::SystemQueryFilterable] as an example
     fn filter_against_param(&self, param: &Box<dyn SystemParalellFilter>) -> bool;
 }
 
@@ -33,7 +38,7 @@ impl<T: EngineResource> From<SystemParam> for Res<T> {
         };
         new_self.find_addr(engine);
 
-        return new_self;
+        new_self
     }
 }
 

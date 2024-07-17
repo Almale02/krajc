@@ -1,5 +1,6 @@
 use cgmath::*;
-use std::{f32::consts::FRAC_PI_2};
+use krajc::Comp;
+use std::f32::consts::FRAC_PI_2;
 use winit::{
     dpi::PhysicalPosition,
     event::{ElementState, MouseScrollDelta, VirtualKeyCode},
@@ -15,13 +16,16 @@ pub const SAFE_FRAC_PI_2: f32 = FRAC_PI_2 - 0.0001;
         0.0, 0.0, 0.0, 1.0,
     );
 
-pub struct Camera {
+#[derive(Default, Comp)]
+pub struct Camera {}
+
+pub struct RenderCamera {
     pub position: Point3<f32>,
     pub yaw: Rad<f32>,
     pub pitch: Rad<f32>,
 }
 
-impl Camera {
+impl RenderCamera {
     pub fn new<V: Into<Point3<f32>>, Y: Into<Rad<f32>>, P: Into<Rad<f32>>>(
         position: V,
         yaw: Y,
@@ -82,7 +86,7 @@ pub struct CameraUniform {
 }
 
 impl CameraUniform {
-    pub fn update_view_proj(&mut self, camera: &Camera, projection: &Projection) {
+    pub fn update_view_proj(&mut self, camera: &RenderCamera, projection: &Projection) {
         self.view_pos = camera.position.to_homogeneous().into();
         self.view_proj = (projection.calc_matrix() * camera.calc_matrix()).into();
     }
@@ -175,7 +179,7 @@ impl CameraController {
         };
     }
 
-    pub fn update_camera(&mut self, camera: &mut Camera, dt: f64) {
+    pub fn update_camera(&mut self, camera: &mut RenderCamera, dt: f64) {
         let dt = dt as f32;
         if self.sprinting {
             self.speed = self.base_speed * 3.

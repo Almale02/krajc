@@ -4,6 +4,7 @@ pub mod material;
 pub mod mesh;
 pub mod render_command;
 pub mod render_entity;
+pub mod systems;
 pub mod texture;
 
 pub mod aspect_ratio;

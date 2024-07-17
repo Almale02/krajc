@@ -1,7 +1,15 @@
-use crate::{generate_state_struct_non_resource, ENGINE_RUNTIME};
+use bytemuck::Contiguous;
+use cgmath::{num_traits::identities, Zero};
+use std::{ops::DerefMut, thread};
+
+use crate::{
+    generate_state_struct_non_resource, typed_addr::dupe, ThreadRawPointer, ENGINE_RUNTIME,
+};
 use std::{
-    thread::{self, Thread},
+    collections::{HashMap, HashSet},
+    slice::IterMut,
     time::Duration,
+    vec::Vec,
 };
 
 use super::{
@@ -11,8 +19,7 @@ use super::{
 };
 use crate::{
     engine_runtime::engine_state_manager::generic_state_manager::GenericStateRefTemplate,
-    generate_state_struct, implement_schedule, init_resource, struct_with_default,
-    typed_addr::TypedAddr,
+    implement_schedule, init_resource, struct_with_default, typed_addr::TypedAddr,
 };
 
 /*pub static mut SCHEDULE_STATES: TypedAddr<RuntimeScheduleResource> = TypedAddr::<_>::default();
@@ -42,47 +49,17 @@ struct_with_default!(RuntimeEngineLoadSchedule{
     actions: Vec<Box<dyn ScheduleRunnable>> = Vec::default(),
     schedule_state: TypedAddr<RuntimeEngineLoadScheduleData> = TypedAddr::new_with_ref(RuntimeEngineLoadScheduleData::init())
 });
-//implement_schedule!(RuntimeEngineLoadSchedule);
+implement_schedule!(RuntimeEngineLoadSchedule);
 init_resource!(RuntimeEngineLoadSchedule);
 
-impl RuntimeEngineLoadSchedule {
-    pub fn new(name: &str, schedule_state_addr: usize) -> Self {
-        Self {
-            schedule_name: name.to_string(),
-            actions: Vec::default(),
-            schedule_state: TypedAddr::new(schedule_state_addr),
-        }
-    }
-    pub fn execute(&mut self) {
-        unsafe {
-            let runtime_raw: TypedAddr<EngineRuntime> =
-                TypedAddr::new(ENGINE_RUNTIME.get() as *mut _ as usize);
-
-            let compatible_actions: Vec<Vec<&mut Box<dyn ScheduleRunnable>>> = Vec::default();
-
-            for action in &mut self.actions {
-                let params: &Vec<Box<dyn SystemParalellFilter>> = action.get_params_filters();
-                if action.predicate(runtime_raw.get(), self.schedule_state.addr) {
-                    action.run(runtime_raw.get(), self.schedule_state.addr)
-                }
-            }
-        }
-    }
-    pub fn register(&mut self, action: Box<dyn ScheduleRunnable>) {
-        self.actions.push(action);
-    }
+pub trait IterExt {
+    type T;
+    fn iter_mut_totallysafe(&self) -> IterMut<'_, Self::T>;
 }
 
-fn check_if_compatible(
-    first: &Vec<Box<dyn SystemParalellFilter>>,
-    second: &Vec<Box<dyn SystemParalellFilter>>,
-) -> bool {
-    for param in first {
-        for other_param in second {
-            if param.filter_against_param(other_param) == false {
-                return false;
-            }
-        }
+impl<T: 'static> IterExt for [T] {
+    type T = T;
+    fn iter_mut_totallysafe(&self) -> IterMut<'_, Self::T> {
+        dupe(self).iter_mut()
     }
-    return true;
 }

@@ -19,7 +19,7 @@ impl SystemParalellFilter for ResFilterable {
     fn filter_against_param(&self, param: &Box<(dyn SystemParalellFilter + 'static)>) -> bool {
         match param.downcast_ref::<ResFilterable>() {
             Some(other) => other.0 != self.0,
-            None => todo!(),
+            None => true,
         }
     }
 }

@@ -13,23 +13,15 @@ impl EngineRuntime {
     pub fn update(&mut self, dt: Duration, start: Instant) {
         let _dt_f64 = dt.as_secs_f64();
         {
-            let engine = TypedAddr::new(
-                *unsafe {
-                    ENGINE_RUNTIME
-                        .get()
-                        .static_resource_map
-                        .get(&TypeId::of::<RuntimeUpdateSchedule>())
-                }
-                .unwrap(),
-            );
+            let engine = unsafe { ENGINE_RUNTIME.get() };
 
-            let runtime_schedule_state: &mut RuntimeUpdateSchedule = engine.get();
+            let runtime_schedule_state: &mut RuntimeUpdateSchedule = engine.get_resource();
             let update_state = runtime_schedule_state.schedule_state.get();
 
             *update_state.dt = dt;
             *update_state.since_start = Instant::now() - start;
 
-            runtime_schedule_state.execute();
+            runtime_schedule_state.execute(engine);
         }
     }
 }

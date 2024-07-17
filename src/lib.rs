@@ -1,11 +1,9 @@
-use std::{borrow::Borrow, ops::Deref};
 
-use legion::internals::world::Comp;
 use proc_macro::TokenStream;
-use quote::{format_ident, quote, quote_spanned, ToTokens};
+use quote::{format_ident, quote};
 use syn::{
-    parse::{Parse, ParseStream, Parser},
-    parse_macro_input, AttrStyle, AttributeArgs, Expr, FnArg, ItemFn, Lit, Meta, NestedMeta, Pat,
+    parse::Parser,
+    parse_macro_input, AttributeArgs, FnArg, ItemFn, Pat,
     PatType, Result,
 };
 extern crate proc_macro;
@@ -228,10 +226,8 @@ impl Parser for MyParsrer {
 
 #[proc_macro_derive(Comp)]
 pub fn comp_derive(input: TokenStream) -> TokenStream {
-    // Parse the input tokens into a syntax tree
     let ast = syn::parse(input).unwrap();
 
-    // Build the trait implementation
     impl_comp(&ast)
 }
 
