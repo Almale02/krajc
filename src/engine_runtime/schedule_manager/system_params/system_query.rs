@@ -56,6 +56,7 @@ pub struct SystemQuery<
     _f: PhantomData<Fetch>,
     _fil: PhantomData<Filter>,
     _t: PhantomData<T>, //_fil: PhantomData<Filter>
+    pub world: &'static mut World,
 }
 
 impl<Fetch, Filter, T> SystemQuery<Fetch, Filter, T>
@@ -73,7 +74,7 @@ where
         Fetch,
         <<<Fetch as IntoView>::View as DefaultFilter>::Filter as BitAnd<Filter>>::Output,
     > {
-        Fetch::query().filter(Filter::default())
+        Fetch::query(self.world).filter(Filter::default())
     }
 }
 
@@ -85,12 +86,13 @@ where
     <T as BitAnd<Filter>>::Output: EntityFilter,
 {
     fn from(value: SystemParam) -> Self {
-        let mut world = &mut value.engine.ecs.world;
+        let world = &mut value.engine.ecs.world;
 
         SystemQuery::<Fetch, Filter, T> {
             _f: PhantomData, /*_fil: PhantomData*/
             _fil: PhantomData,
             _t: PhantomData,
+            world,
         }
     }
 }

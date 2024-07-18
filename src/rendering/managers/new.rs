@@ -2,6 +2,7 @@ use std::ops::Deref;
 
 use image::GenericImageView;
 
+use rapier3d::na::Point3;
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
     *,
@@ -67,7 +68,7 @@ impl EngineRuntime {
 
         let _camera_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Camera Buffer"),
-            contents: bytemuck::cast_slice(&[camera_uniform.clone()]),
+            contents: bytemuck::cast_slice(&[camera_uniform]),
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         });
         let render_state = unsafe { ENGINE_RUNTIME.get().get_resource::<RenderManagerResource>() };
@@ -76,14 +77,10 @@ impl EngineRuntime {
         let device = &render_state.device;
 
         let instance_scheme = TestInstanceSchemes::row(1);
-        let instance_data = instance_scheme
-            .iter()
-            .map(TextureMaterialInstance::to_raw)
-            .collect::<Vec<_>>();
         let instance_buffer = ManagedBufferInstanceHandle::<InstanceBufferType>::new_with_size(
             "instance_buffer".to_owned(),
             //4092u64.pow(2),
-            9000,
+            268435456,
         );
 
         let camera_buffer = ManagedBufferInstanceHandle::<UniformBufferType>::new_with_init(
@@ -243,7 +240,12 @@ impl EngineRuntime {
             multiview: None, // 5.
         });
 
-        let camera = RenderCamera::new((0.0, 5.0, 10.0), cgmath::Deg(-90.0), cgmath::Deg(-20.0));
+        let camera = RenderCamera::new(
+            //(0.0f32, 5.0f32, 10.0f32).into(),
+            Point3::<f32>::new(0., 5., 10.),
+            cgmath::Deg(-90.0).into(),
+            cgmath::Deg(-20.0).into(),
+        );
         let projection =
             Projection::new(config.width, config.height, cgmath::Deg(45.0), 0.1, 100.0);
         let camera_controller = CameraController::new(4.0, 0.4);

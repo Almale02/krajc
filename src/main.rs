@@ -4,10 +4,10 @@ use crate::rendering::systems::general::update_rendering;
 use krajc::{system_fn, Comp};
 use legion::{
     query::{EntityFilterTuple, Passthrough},
-    Query, Read, Write,
+    Read,
 };
 
-type QueryFilter<A, B = Passthrough> = EntityFilterTuple<A, B>;
+pub type QueryFilter<A, B = Passthrough> = EntityFilterTuple<A, B>;
 
 use pollster::FutureExt;
 use typed_addr::{dupe, TypedAddr};
@@ -40,7 +40,7 @@ use engine_runtime::{
 use ordered_float::OrderedFloat;
 use rendering::{
     aspect_ratio::AspectUniform,
-    buffer_manager::managed_buffer::ManagedBufferGeneric,
+    buffer_manager::{managed_buffer::ManagedBufferGeneric, InstanceBufferType, UniformBufferType},
     managers::RenderManagerResource,
     mesh::mesh::Mesh,
     render_entity::{instancing::TestInstanceSchemes, render_entity::TextureMaterialInstance},
@@ -63,41 +63,6 @@ pub mod engine_runtime;
 pub mod rendering;
 pub mod typed_addr;
 
-#[derive(Default)]
-pub struct UniformBufferType {
-    instance_handles: HashMap<String, (&'static [u8], Buffer)>,
-}
-impl ManagedBufferGeneric for UniformBufferType {
-    fn buffer_usages() -> wgpu::BufferUsages {
-        BufferUsages::UNIFORM | BufferUsages::COPY_DST
-    }
-    fn label() -> String {
-        String::from("uniform buffer")
-    }
-    fn instance_handles(
-        &mut self,
-    ) -> &mut std::collections::HashMap<String, (&'static [u8], Buffer)> {
-        &mut self.instance_handles
-    }
-}
-#[derive(Default)]
-pub struct InstanceBufferType {
-    instance_handles: HashMap<String, (&'static [u8], Buffer)>,
-}
-impl ManagedBufferGeneric for InstanceBufferType {
-    fn buffer_usages() -> wgpu::BufferUsages {
-        BufferUsages::VERTEX | BufferUsages::COPY_DST
-    }
-    fn label() -> String {
-        String::from("instance_buffer")
-    }
-    fn instance_handles(
-        &mut self,
-    ) -> &mut std::collections::HashMap<String, (&'static [u8], Buffer)> {
-        &mut self.instance_handles
-    }
-}
-
 fn main() {
     run().block_on();
 }
@@ -111,8 +76,8 @@ fn startup(
     dbg!("ran startup");
     let mut entities: Vec<(TextureMaterialInstance,)> = vec![];
 
-    let width = 9;
-    let height = 9;
+    let width = 999;
+    let height = 999;
 
     for y in 0..height {
         for x in 0..width {
@@ -127,7 +92,7 @@ fn startup(
 
     let render = render.get_static_mut();
 
-    let query2 = query.query().iter(&*world).collect::<Vec<_>>();
+    let query2 = query.query().iter().collect::<Vec<_>>();
     //let instance_data = query2.iter().map(|arg| arg.to_raw()).collect::<Vec<_>>();
     dupe(render).material.set_instance_value_ref(query2);
 
@@ -151,9 +116,6 @@ fn fps_logger(
         dbg!(1. / update.dt.as_secs_f64());
         *prev_full_sec = update.since_start.as_secs_f64() as u64;
         dbg!(*prev_full_sec);
-
-        let test = TextureMaterialInstance::from_pos(render_state.camera.position.into());
-        //world.push((test,));
 
         dbg!(render_state.camera_uniform.view_pos);
     }

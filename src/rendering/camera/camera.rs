@@ -1,5 +1,7 @@
-use cgmath::*;
+use cgmath::{perspective, InnerSpace, Matrix4, Rad};
+//use cgmath::*;
 use krajc::Comp;
+use rapier3d::na::{OPoint, Point3};
 use std::f32::consts::FRAC_PI_2;
 use winit::{
     dpi::PhysicalPosition,
@@ -26,11 +28,7 @@ pub struct RenderCamera {
 }
 
 impl RenderCamera {
-    pub fn new<V: Into<Point3<f32>>, Y: Into<Rad<f32>>, P: Into<Rad<f32>>>(
-        position: V,
-        yaw: Y,
-        pitch: P,
-    ) -> Self {
+    pub fn new(position: Point3<f32>, yaw: Rad<f32>, pitch: Rad<f32>) -> Self {
         Self {
             position: position.into(),
             yaw: yaw.into(),
@@ -43,9 +41,13 @@ impl RenderCamera {
         let (sin_yaw, cos_yaw) = self.yaw.0.sin_cos();
 
         Matrix4::look_to_rh(
-            self.position,
-            Vector3::new(cos_pitch * cos_yaw, sin_pitch, cos_pitch * sin_yaw).normalize(),
-            Vector3::unit_y(),
+            cgmath::Point3 {
+                x: self.position.x,
+                y: self.position.y,
+                z: self.position.z,
+            },
+            cgmath::Vector3::new(cos_pitch * cos_yaw, sin_pitch, cos_pitch * sin_yaw).normalize(),
+            cgmath::Vector3::unit_y(),
         )
     }
 }
@@ -186,13 +188,16 @@ impl CameraController {
         } else {
             self.speed = self.base_speed
         }
+        let mut cam_pos =
+            cgmath::Vector3::new(camera.position.x, camera.position.y, camera.position.z);
 
         // Move forward/backward and left/right
         let (yaw_sin, yaw_cos) = camera.yaw.0.sin_cos();
-        let forward = Vector3::new(yaw_cos, 0.0, yaw_sin).normalize();
-        let right = Vector3::new(-yaw_sin, 0.0, yaw_cos).normalize();
-        camera.position += forward * (self.amount_forward - self.amount_backward) * self.speed * dt;
-        camera.position += right * (self.amount_right - self.amount_left) * self.speed * dt;
+        let forward = cgmath::Vector3::new(yaw_cos, 0.0, yaw_sin).normalize();
+        let right = cgmath::Vector3::new(-yaw_sin, 0.0, yaw_cos).normalize();
+        cam_pos +=
+            forward * ((self.amount_forward - self.amount_backward) * self.speed * dt).into();
+        cam_pos += right * (self.amount_right - self.amount_left) * self.speed * dt;
 
         // Move in/out (aka. "zoom")
         // Note: this isn't an actual zoom. The camera's position
@@ -200,8 +205,8 @@ impl CameraController {
         // to get closer to an object you want to focus on.
         let (pitch_sin, pitch_cos) = camera.pitch.0.sin_cos();
         let scrollward =
-            Vector3::new(pitch_cos * yaw_cos, pitch_sin, pitch_cos * yaw_sin).normalize();
-        camera.position += scrollward * self.scroll * self.speed * self.sensitivity * dt;
+            cgmath::Vector3::new(pitch_cos * yaw_cos, pitch_sin, pitch_cos * yaw_sin).normalize();
+        cam_pos += scrollward * self.scroll * self.speed * self.sensitivity * dt;
         self.scroll = 0.0;
 
         // Move up/down. Since we don't use roll, we can just
@@ -224,5 +229,6 @@ impl CameraController {
         } else if camera.pitch > Rad(SAFE_FRAC_PI_2) {
             camera.pitch = Rad(SAFE_FRAC_PI_2);
         }
+        camera.position = Point3::new(cam_pos.x, cam_pos.y, cam_pos.z);
     }
 }
