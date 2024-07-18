@@ -14,7 +14,7 @@ use crate::{
     rendering::{
         aspect_ratio::AspectUniform,
         buffer_manager::managed_buffer::{ManagedBufferGeneric, ManagedBufferInstanceHandle},
-        camera::camera::{CameraController, CameraUniform, Projection, RenderCamera},
+        camera::camera::{CameraController, CameraUniform, Projection},
         material::TextureMaterial,
         mesh::mesh::TextureVertex,
         render_entity::{
@@ -240,12 +240,12 @@ impl EngineRuntime {
             multiview: None, // 5.
         });
 
-        let camera = RenderCamera::new(
+        /*let camera = RenderCamera::new(
             //(0.0f32, 5.0f32, 10.0f32).into(),
             Point3::<f32>::new(0., 5., 10.),
             cgmath::Deg(-90.0).into(),
             cgmath::Deg(-20.0).into(),
-        );
+        );*/
         let projection =
             Projection::new(config.width, config.height, cgmath::Deg(45.0), 0.1, 100.0);
         let camera_controller = CameraController::new(4.0, 0.4);
@@ -261,7 +261,6 @@ impl EngineRuntime {
         render_state.depth_texture.init(depth_texture);
         render_state.instance_scheme.init(instance_scheme);
         render_state.instance_buffer.init(instance_buffer);
-        render_state.camera.init(camera);
         render_state.projection.init(projection);
         render_state.camera_controller.init(camera_controller);
         render_state.camera_uniform.init(camera_uniform);

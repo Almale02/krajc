@@ -11,7 +11,7 @@ use crate::{
 use super::{
     aspect_ratio::AspectUniform,
     buffer_manager::managed_buffer::ManagedBufferInstanceHandle,
-    camera::camera::{CameraController, CameraUniform, Projection, RenderCamera},
+    camera::camera::{CameraController, CameraUniform, Projection},
     material::TextureMaterial,
     render_entity::render_entity::TextureMaterialInstance,
     texture::texture::Texture,
@@ -43,7 +43,6 @@ generate_state_struct!(RenderManagerResource {
      instance_scheme: Vec<TextureMaterialInstance> = "instance_scheme",
      instance_buffer: ManagedBufferInstanceHandle<InstanceBufferType>= "instance_buffer",
 
-     camera: RenderCamera = "camera",
      projection: Projection = "projection",
      camera_controller: CameraController = "camera_controller",
      camera_uniform: CameraUniform = "camera_uniform",

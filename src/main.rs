@@ -1,4 +1,5 @@
 #![allow(invalid_reference_casting)]
+#![feature(negative_impls)]
 
 use crate::rendering::systems::general::update_rendering;
 use krajc::{system_fn, Comp};
@@ -10,6 +11,10 @@ use legion::{
 pub type QueryFilter<A, B = Passthrough> = EntityFilterTuple<A, B>;
 
 use pollster::FutureExt;
+use rapier3d::{
+    math::Translation,
+    na::{Isometry, Translation2, UnitQuaternion},
+};
 use typed_addr::{dupe, TypedAddr};
 
 use std::{
@@ -19,7 +24,7 @@ use std::{
     time::Instant,
 };
 
-use cgmath::{Point3, Vector3};
+use cgmath::{Deg, Point3, Rad, Vector3};
 
 use engine_runtime::{
     schedule_manager::{
@@ -41,6 +46,7 @@ use ordered_float::OrderedFloat;
 use rendering::{
     aspect_ratio::AspectUniform,
     buffer_manager::{managed_buffer::ManagedBufferGeneric, InstanceBufferType, UniformBufferType},
+    camera::camera::Camera,
     managers::RenderManagerResource,
     mesh::mesh::Mesh,
     render_entity::{instancing::TestInstanceSchemes, render_entity::TextureMaterialInstance},
@@ -76,8 +82,8 @@ fn startup(
     dbg!("ran startup");
     let mut entities: Vec<(TextureMaterialInstance,)> = vec![];
 
-    let width = 999;
-    let height = 999;
+    let width = 99;
+    let height = 99;
 
     for y in 0..height {
         for x in 0..width {
@@ -90,11 +96,21 @@ fn startup(
     dbg!(entities.len());
     world.extend(entities);
 
+    let trans = Translation::new(0., 5., 10.);
+    let quat = UnitQuaternion::from_euler_angles(
+        0.,
+        std::convert::Into::<Rad<f32>>::into(Deg(-90.)).0,
+        std::convert::Into::<Rad<f32>>::into(Deg(-20.)).0,
+    );
+
+    world.push((Isometry::from_parts(trans, quat), Camera));
+    dbg!("ran push");
+
     let render = render.get_static_mut();
 
-    let query2 = query.query().iter().collect::<Vec<_>>();
+    let query = query.query().iter().collect::<Vec<_>>();
     //let instance_data = query2.iter().map(|arg| arg.to_raw()).collect::<Vec<_>>();
-    dupe(render).material.set_instance_value_ref(query2);
+    dupe(render).material.set_instance_value_ref(query);
 
     let mesh = Mesh::build_cube(&render.device, 1., 1., 1.);
 
