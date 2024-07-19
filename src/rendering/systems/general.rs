@@ -1,6 +1,10 @@
+use std::ops::Deref;
+use std::ops::DerefMut;
+
 use crate::engine_runtime::schedule_manager::system_params::system_query::EcsWorld;
 use crate::engine_runtime::schedule_manager::system_params::system_query::SystemQuery;
 use crate::rendering::camera::camera::Camera;
+use crate::typed_addr;
 use crate::typed_addr::dupe;
 use crate::AspectUniform;
 use crate::Mesh;
@@ -9,57 +13,50 @@ use crate::RenderManagerResource;
 use crate::RuntimeUpdateScheduleData;
 use crate::SchedData;
 
+use bevy_ecs::component::Component;
+use bevy_ecs::query::With;
+use bevy_ecs::system::Query;
 use krajc::system_fn;
 use krajc::Comp;
-use legion::internals::world::Comp;
-use legion::query::ComponentFilter;
-use legion::query::EntityFilterTuple;
-use legion::query::Not;
-use legion::query::Passthrough;
-use legion::Entity;
-use legion::IntoQuery;
-use legion::Read;
-use legion::Write;
 use rapier3d::math::Vector;
 use rapier3d::na::Isometry3;
 
 use crate::Res;
 
-pub type Isometry = Isometry3<f32>;
+#[derive(Component)]
+pub struct Isometry {
+    _iso: Isometry3<f32>,
+}
 
-#[derive(Default, Comp)]
-pub struct Test {}
-
-impl !Comp for Camera {}
+impl Deref for Isometry {
+    type Target = Isometry3<f32>;
+    fn deref(&self) -> &Self::Target {
+        &self._iso
+    }
+}
+impl DerefMut for Isometry {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self._iso
+    }
+}
 
 #[system_fn(RuntimeUpdateSchedule)]
 pub fn update_rendering(
-    camera: SystemQuery<Write<Isometry>, QueryFilter<ComponentFilter<Camera>>>,
+    mut camera: SystemQuery<&mut Isometry, With<Camera>>,
     mut render_state: Res<RenderManagerResource>,
     update: SchedData<RuntimeUpdateScheduleData>,
     mut world: EcsWorld,
 ) {
     let render_state = render_state.get_static_mut();
 
-    /*let iso = {
-        let q = camera.query().get_single_mut();
-        if q.is_none() {
-            return;
-        };
-        q.unwrap()
-    };*/
-    let iso = <(Write<Isometry>)>::query(dupe(&mut *world))
-        //.filter(<EntityFilterTuple<ComponentFilter<Camera>, Passthrough>>::default())
-        .iter_mut()
-        .next()
-        .unwrap();
+    let mut iso = camera.single_mut();
 
     render_state
         .camera_controller
-        .update_camera(iso, update.dt.as_secs_f64());
+        .update_camera(&mut *iso, update.dt.as_secs_f64());
     render_state
         .camera_uniform
-        .update_view_proj(iso, &render_state.projection);
+        .update_view_proj(&mut *iso, &render_state.projection);
 
     render_state
         .camera_buffer

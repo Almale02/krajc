@@ -1,3 +1,4 @@
+use bevy_ecs::component::Component;
 use cgmath::{perspective, InnerSpace, Matrix4, Point3, Rad, Vector3};
 //use cgmath::*;
 use krajc::Comp;
@@ -20,7 +21,7 @@ pub const SAFE_FRAC_PI_2: f32 = FRAC_PI_2 - 0.0001;
         0.0, 0.0, 0.0, 1.0,
     );
 
-#[derive(Default)]
+#[derive(Default, Component)]
 pub struct Camera();
 
 impl Camera {

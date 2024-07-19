@@ -75,7 +75,7 @@ fn main() {
 
 #[system_fn(RuntimeEngineLoadSchedule)]
 fn startup(
-    query: SystemQuery<Read<TextureMaterialInstance>>,
+    query: SystemQuery<&mut TextureMaterialInstance>,
     mut world: EcsWorld,
     mut render: Res<RenderManagerResource>,
 ) {

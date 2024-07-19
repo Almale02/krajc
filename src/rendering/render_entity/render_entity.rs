@@ -1,9 +1,10 @@
+use bevy_ecs::component::Component;
 use bytemuck::{Pod, Zeroable};
 use cgmath::{prelude::*, *};
 
 use crate::*;
 
-#[derive(Clone, PartialEq, Debug, Comp)]
+#[derive(Clone, PartialEq, Debug, Component)]
 pub struct TextureMaterialInstance {
     pub position: Vec3,
     pub rotation: Quaternion<f32>,

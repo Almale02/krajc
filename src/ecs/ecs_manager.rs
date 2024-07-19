@@ -1,4 +1,4 @@
-use legion::{internals::iter::map::Into, World, WorldOptions};
+use bevy_ecs::world::World;
 
 pub struct EcsManager {
     pub world: World,
@@ -6,9 +6,7 @@ pub struct EcsManager {
 impl Default for EcsManager {
     fn default() -> Self {
         Self {
-            world: World::new(WorldOptions {
-                groups: Vec::default(),
-            }),
+            world: World::new(),
         }
     }
 }

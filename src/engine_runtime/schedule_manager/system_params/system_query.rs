@@ -4,31 +4,36 @@ use std::{
     ops::{BitAnd, Deref, DerefMut},
 };
 
-use legion::{
-    internals::query::view::IntoView,
-    query::{DefaultFilter, EntityFilter, EntityFilterTuple, Passthrough, View},
-    storage::ComponentTypeId,
-    IntoQuery, Query, World,
+use bevy_ecs::{
+    component::ComponentId,
+    entity::Entity,
+    query::{
+        FilteredAccess, QueryBuilder, QueryData, QueryEntityError, QueryFilter, QueryIter,
+        QuerySingleError, QueryState, ROQueryItem,
+    },
+    world::World,
 };
+
+use crate::typed_addr::dupe;
 
 use super::system_param::{IntoSystemParalellFilter, SystemParalellFilter, SystemParam};
 
 pub struct SystemQueryFilterable {
-    pub reads: Vec<ComponentTypeId>,
-    pub writes: Vec<ComponentTypeId>,
+    pub access: FilteredAccess<ComponentId>,
 }
 
 impl SystemQueryFilterable {
-    pub fn new(reads: Vec<ComponentTypeId>, writes: Vec<ComponentTypeId>) -> Self {
-        Self { reads, writes }
+    pub fn new(access: FilteredAccess<ComponentId>) -> Self {
+        Self { access }
     }
 }
 
 impl SystemParalellFilter for SystemQueryFilterable {
     fn filter_against_param(&self, other: &Box<(dyn SystemParalellFilter + 'static)>) -> bool {
-        match other.downcast_ref::<SystemQueryFilterable>() {
+        return match other.downcast_ref::<SystemQueryFilterable>() {
             Some(x) => {
-                let reads = self.reads.clone().into_iter().collect::<HashSet<_>>();
+                self.access.is_compatible(&x.access)
+                /*let reads = self.reads.clone().into_iter().collect::<HashSet<_>>();
                 let writes = self.writes.clone().into_iter().collect::<HashSet<_>>();
 
                 let other_reads = &x.reads.clone().into_iter().collect::<HashSet<_>>();
@@ -36,78 +41,115 @@ impl SystemParalellFilter for SystemQueryFilterable {
 
                 reads.is_disjoint(other_writes)
                     && writes.is_disjoint(other_writes)
-                    && other_reads.is_disjoint(&writes)
+                    && other_reads.is_disjoint(&writes)*/
             }
             None => true,
-        }
+        };
     }
 }
 
-pub struct SystemQuery<
-    Fetch,
-    Filter = EntityFilterTuple<Passthrough, Passthrough>,
-    T = EntityFilterTuple<Passthrough, Passthrough>,
-> where
-    Fetch: IntoView + DefaultFilter,
-    Filter: EntityFilter,
-    T: BitAnd<Filter> + EntityFilter,
-    <T as BitAnd<Filter>>::Output: EntityFilter,
+pub struct SystemQuery<Data, Filter = ()>
+where
+    Data: QueryData,
+    Filter: QueryFilter,
 {
-    _f: PhantomData<Fetch>,
-    _fil: PhantomData<Filter>,
-    _t: PhantomData<T>, //_fil: PhantomData<Filter>
+    _d: PhantomData<Data>,
+    _f: PhantomData<Filter>,
+    provider: QueryState<Data, Filter>,
     pub world: &'static mut World,
 }
 
-impl<Fetch, Filter, T> SystemQuery<Fetch, Filter, T>
-where
-    Fetch: IntoView + DefaultFilter,
-    Filter: EntityFilter,
-    T: BitAnd<Filter> + EntityFilter,
-    <T as BitAnd<Filter>>::Output: EntityFilter,
-    <<Fetch as IntoView>::View as DefaultFilter>::Filter: BitAnd<Filter>,
-    <<<Fetch as IntoView>::View as DefaultFilter>::Filter as BitAnd<Filter>>::Output: EntityFilter,
-{
-    pub fn query(
-        self,
-    ) -> Query<
-        Fetch,
-        <<<Fetch as IntoView>::View as DefaultFilter>::Filter as BitAnd<Filter>>::Output,
-    > {
-        Fetch::query(self.world).filter(Filter::default())
+impl<Data: QueryData, Filter: QueryFilter> SystemQuery<Data, Filter> {
+    #[inline]
+    pub fn iter<'w, 's>(&'s mut self) -> QueryIter<'w, 's, Data::ReadOnly, Filter> {
+        self.provider.iter(dupe(self.world))
+    }
+
+    /// Returns an [`Iterator`] over the query results for the given [`World`].
+    ///
+    /// This iterator is always guaranteed to return results from each matching entity once and only once.
+    /// Iteration order is not guaranteed.
+    #[inline]
+    pub fn iter_mut<'w, 's>(&'s mut self) -> QueryIter<'w, 's, Data, Filter> {
+        self.provider.iter_mut(dupe(self.world))
+    }
+    #[inline]
+    pub fn get<'w>(&mut self, entity: Entity) -> Result<ROQueryItem<'w, Data>, QueryEntityError> {
+        self.provider.get(dupe(self.world), entity)
+    }
+    #[inline]
+    pub fn get_mut<'w>(&mut self, entity: Entity) -> Result<Data::Item<'w>, QueryEntityError> {
+        self.provider.get_mut(dupe(self.world), entity)
+    }
+
+    #[track_caller]
+    #[inline]
+    pub fn single<'w>(&mut self) -> ROQueryItem<'w, Data> {
+        self.provider.single(dupe(self.world))
+    }
+
+    /// Returns a single immutable query result when there is exactly one entity matching
+    /// the query.
+    ///
+    /// This can only be called for read-only queries,
+    /// see [`get_single_mut`](Self::get_single_mut) for write-queries.
+    ///
+    /// If the number of query results is not exactly one, a [`QuerySingleError`] is returned
+    /// instead.
+    #[inline]
+    pub fn get_single<'w>(&mut self) -> Result<ROQueryItem<'w, Data>, QuerySingleError> {
+        self.provider.get_single(dupe(self.world))
+    }
+
+    /// Returns a single mutable query result when there is exactly one entity matching
+    /// the query.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the number of query results is not exactly one. Use
+    /// [`get_single_mut`](Self::get_single_mut) to return a `Result` instead of panicking.
+    #[track_caller]
+    #[inline]
+    pub fn single_mut<'w>(&mut self) -> Data::Item<'w> {
+        self.provider.single_mut(dupe(self.world))
+    }
+
+    /// Returns a single mutable query result when there is exactly one entity matching
+    /// the query.
+    ///
+    /// If the number of query results is not exactly one, a [`QuerySingleError`] is returned
+    /// instead.
+    #[inline]
+    pub fn get_single_mut<'w>(&mut self) -> Result<Data::Item<'w>, QuerySingleError> {
+        self.provider.get_single_mut(dupe(self.world))
     }
 }
 
-impl<Fetch, Filter, T> From<SystemParam> for SystemQuery<Fetch, Filter, T>
+impl<Data, Filter> From<SystemParam> for SystemQuery<Data, Filter>
 where
-    Fetch: IntoView + DefaultFilter,
-    Filter: EntityFilter,
-    T: BitAnd<Filter> + EntityFilter,
-    <T as BitAnd<Filter>>::Output: EntityFilter,
+    Data: QueryData,
+    Filter: QueryFilter,
 {
     fn from(value: SystemParam) -> Self {
         let world = &mut value.engine.ecs.world;
+        let provider = QueryBuilder::<Data, Filter>::new(world).build();
 
-        SystemQuery::<Fetch, Filter, T> {
-            _f: PhantomData, /*_fil: PhantomData*/
-            _fil: PhantomData,
-            _t: PhantomData,
+        SystemQuery {
+            _d: PhantomData,
+            _f: PhantomData,
             world,
+            provider,
         }
     }
 }
-impl<Fetch, Filter, T> IntoSystemParalellFilter for SystemQuery<Fetch, Filter, T>
+impl<Data, Filter> IntoSystemParalellFilter for SystemQuery<Data, Filter>
 where
-    Fetch: IntoView + DefaultFilter,
-    Filter: EntityFilter,
-    T: BitAnd<Filter> + EntityFilter,
-    <T as BitAnd<Filter>>::Output: EntityFilter,
+    Data: QueryData,
+    Filter: QueryFilter,
 {
     fn get_filterable(&self) -> Box<dyn SystemParalellFilter> {
-        Box::new(SystemQueryFilterable::new(
-            Fetch::View::reads_types_vec(),
-            Fetch::View::writes_types_vec(),
-        ))
+        let access = self.provider.component_access();
+        Box::new(SystemQueryFilterable::new(access.clone()))
     }
 }
 
