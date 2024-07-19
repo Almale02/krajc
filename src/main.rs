@@ -3,17 +3,14 @@
 
 use crate::rendering::systems::general::update_rendering;
 use krajc::{system_fn, Comp};
-use legion::{
-    query::{EntityFilterTuple, Passthrough},
-    Read,
-};
 
-pub type QueryFilter<A, B = Passthrough> = EntityFilterTuple<A, B>;
+//pub type QueryFilter<A, B = Passthrough> = EntityFilterTuple<A, B>;
 
+use physics::systems::step_physics;
 use pollster::FutureExt;
 use rapier3d::{
     math::Translation,
-    na::{Isometry, Translation2, UnitQuaternion},
+    na::{Isometry3, Translation2, UnitQuaternion},
 };
 use typed_addr::{dupe, TypedAddr};
 
@@ -29,7 +26,8 @@ use cgmath::{Deg, Point3, Rad, Vector3};
 use engine_runtime::{
     schedule_manager::{
         runtime_schedule::{
-            RuntimeEngineLoadScheduleData, RuntimeUpdateSchedule, RuntimeUpdateScheduleData,
+            RuntimeEndFrameSchedule, RuntimeEngineLoadScheduleData, RuntimeUpdateSchedule,
+            RuntimeUpdateScheduleData,
         },
         schedule::ScheduleRunnable,
         system_params::{
@@ -50,6 +48,7 @@ use rendering::{
     managers::RenderManagerResource,
     mesh::mesh::Mesh,
     render_entity::{instancing::TestInstanceSchemes, render_entity::TextureMaterialInstance},
+    systems::general::Transform,
 };
 
 use wgpu::{Buffer, BufferUsages, RenderBundle, SurfaceError};
@@ -63,9 +62,9 @@ use crate::{
 pub static mut ENGINE_RUNTIME: TypedAddr<EngineRuntime> = TypedAddr::<EngineRuntime>::default();
 
 pub mod ecs;
+pub mod physics;
 
 pub mod engine_runtime;
-///#[forbid(clippy::unwrap_used)]
 pub mod rendering;
 pub mod typed_addr;
 
@@ -75,7 +74,7 @@ fn main() {
 
 #[system_fn(RuntimeEngineLoadSchedule)]
 fn startup(
-    query: SystemQuery<&mut TextureMaterialInstance>,
+    mut query: SystemQuery<&mut TextureMaterialInstance>,
     mut world: EcsWorld,
     mut render: Res<RenderManagerResource>,
 ) {
@@ -94,7 +93,7 @@ fn startup(
     }
 
     dbg!(entities.len());
-    world.extend(entities);
+    world.spawn_batch(entities);
 
     let trans = Translation::new(0., 5., 10.);
     let quat = UnitQuaternion::from_euler_angles(
@@ -103,12 +102,12 @@ fn startup(
         std::convert::Into::<Rad<f32>>::into(Deg(-20.)).0,
     );
 
-    world.push((Isometry::from_parts(trans, quat), Camera));
+    world.spawn((Transform::new(Isometry3::from_parts(trans, quat)), Camera));
     dbg!("ran push");
 
     let render = render.get_static_mut();
 
-    let query = query.query().iter().collect::<Vec<_>>();
+    let query = query.iter().collect::<Vec<_>>();
     //let instance_data = query2.iter().map(|arg| arg.to_raw()).collect::<Vec<_>>();
     dupe(render).material.set_instance_value_ref(query);
 
@@ -152,6 +151,7 @@ pub async fn run() {
     fps_logger!(runtime);
     update_rendering!(runtime);
     startup!(runtime);
+    step_physics!(runtime);
 
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new()

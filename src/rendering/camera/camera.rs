@@ -9,7 +9,7 @@ use winit::{
     event::{ElementState, MouseScrollDelta, VirtualKeyCode},
 };
 
-use crate::rendering::systems::general::Isometry;
+use crate::rendering::systems::general::Transform;
 
 pub const SAFE_FRAC_PI_2: f32 = FRAC_PI_2 - 0.0001;
 
@@ -22,10 +22,10 @@ pub const SAFE_FRAC_PI_2: f32 = FRAC_PI_2 - 0.0001;
     );
 
 #[derive(Default, Component)]
-pub struct Camera();
+pub struct Camera;
 
 impl Camera {
-    pub fn calc_matrix(iso: &mut Isometry) -> Matrix4<f32> {
+    pub fn calc_matrix(iso: &mut Transform) -> Matrix4<f32> {
         let (sin_pitch, cos_pitch) = iso.rotation.euler_angles().1.sin_cos();
         let (sin_yaw, cos_yaw) = iso.rotation.euler_angles().2.sin_cos();
 
@@ -77,7 +77,7 @@ pub struct CameraUniform {
 }
 
 impl CameraUniform {
-    pub fn update_view_proj(&mut self, iso: &mut Isometry, projection: &Projection) {
+    pub fn update_view_proj(&mut self, iso: &mut Transform, projection: &Projection) {
         let pos = cgmath::Point3::new(iso.translation.x, iso.translation.y, iso.translation.z);
         self.view_pos = pos.to_homogeneous().into();
         self.view_proj = (projection.calc_matrix() * Camera::calc_matrix(iso)).into();
@@ -171,7 +171,7 @@ impl CameraController {
         };
     }
 
-    pub fn update_camera(&mut self, iso: &mut Isometry, dt: f64) {
+    pub fn update_camera(&mut self, iso: &mut Transform, dt: f64) {
         let mut yaw = iso.rotation.euler_angles().2;
         let mut pitch = iso.rotation.euler_angles().1;
 

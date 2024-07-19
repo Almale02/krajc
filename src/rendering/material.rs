@@ -2,10 +2,6 @@ use std::{any::Any, ops::Range, time::Instant};
 
 use hal::Instance;
 use krajc::{system_fn, system_fn_non_expand, Comp};
-use legion::{
-    query::{ComponentFilter, EntityFilterTuple, Passthrough},
-    IntoQuery, Query, Read,
-};
 use wgpu::*;
 
 use crate::{
@@ -102,7 +98,7 @@ impl TextureMaterial {
 
 #[system_fn(RuntimeUpdateSchedule)]
 pub fn update_texture_material(
-    query: SystemQuery<Read<TextureMaterialInstance>>,
+    query: SystemQuery<&TextureMaterialInstance>,
     mut render: Res<RenderManagerResource>,
     world: EcsWorld,
 ) {

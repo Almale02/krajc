@@ -8,7 +8,6 @@ use crate::typed_addr;
 use crate::typed_addr::dupe;
 use crate::AspectUniform;
 use crate::Mesh;
-use crate::QueryFilter;
 use crate::RenderManagerResource;
 use crate::RuntimeUpdateScheduleData;
 use crate::SchedData;
@@ -24,28 +23,34 @@ use rapier3d::na::Isometry3;
 use crate::Res;
 
 #[derive(Component)]
-pub struct Isometry {
-    _iso: Isometry3<f32>,
+pub struct Transform {
+    iso: Isometry3<f32>,
 }
 
-impl Deref for Isometry {
-    type Target = Isometry3<f32>;
-    fn deref(&self) -> &Self::Target {
-        &self._iso
+impl Transform {
+    pub fn new(iso: Isometry3<f32>) -> Self {
+        Self { iso }
     }
 }
-impl DerefMut for Isometry {
+
+impl Deref for Transform {
+    type Target = Isometry3<f32>;
+    fn deref(&self) -> &Self::Target {
+        &self.iso
+    }
+}
+impl DerefMut for Transform {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self._iso
+        &mut self.iso
     }
 }
 
 #[system_fn(RuntimeUpdateSchedule)]
 pub fn update_rendering(
-    mut camera: SystemQuery<&mut Isometry, With<Camera>>,
-    mut render_state: Res<RenderManagerResource>,
-    update: SchedData<RuntimeUpdateScheduleData>,
-    mut world: EcsWorld,
+    mut camera: SystemQuery<&mut Transform, With<Camera>>, // you can see that i am using bevy for querying,
+    mut render_state: Res<RenderManagerResource>,          // my own resource system
+    update: SchedData<RuntimeUpdateScheduleData>, // data related to the schedule like delta time
+    mut world: EcsWorld, // reference to the bevy ecs world to insert entities,
 ) {
     let render_state = render_state.get_static_mut();
 

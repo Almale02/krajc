@@ -6,6 +6,7 @@ use std::{
 
 use crate::{
     ecs::ecs_manager::EcsManager,
+    physics::physics_world::PhysicsWorld,
     rendering::{buffer_manager::buffer_manager::BufferManager, managers::RenderManagerResource},
     typed_addr::TypedAddr,
     ENGINE_RUNTIME,
@@ -26,6 +27,7 @@ pub struct EngineRuntime {
     pub system_locals: HashMap<&'static str, HashMap<u8, Box<dyn Any>>>,
     pub buffer_manager: BufferManager,
     pub ecs: EcsManager,
+    pub physics: PhysicsWorld,
 }
 
 impl Default for EngineRuntime {
@@ -37,14 +39,17 @@ impl Default for EngineRuntime {
 impl EngineRuntime {
     pub fn new() -> Self {
         Self {
-            paralellism: {match std::env::var("KRAJC_PARALLELISM") {
+            physics: PhysicsWorld::default(),
+            paralellism: {
+                match std::env::var("KRAJC_PARALLELISM") {
                 Ok(value) => {match value.as_str() {
                     "true" => true,
                     "false" => false,
                     _ => panic!("invalid value for env variable KRAJC_PARALLELISM, value should be 'true' or 'false'")
-                }},
-                Err(_) => true/*{true}*/,
-            }},
+                }},
+                Err(_) => true/*{true}*/,
+            }
+            },
             state: EngineStateManager {
                 generic: GenericStateManager::new(),
             },

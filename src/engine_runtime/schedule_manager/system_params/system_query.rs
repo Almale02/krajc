@@ -14,7 +14,7 @@ use bevy_ecs::{
     world::World,
 };
 
-use crate::typed_addr::dupe;
+use crate::{engine_runtime::EngineRuntime, typed_addr::dupe};
 
 use super::system_param::{IntoSystemParalellFilter, SystemParalellFilter, SystemParam};
 
@@ -160,6 +160,40 @@ impl SystemParalellFilter for EcsWorldFilterable {
     }
 }
 
+pub struct Runtime {
+    runtime: &'static mut EngineRuntime,
+}
+impl Deref for Runtime {
+    type Target = EngineRuntime;
+    fn deref(&self) -> &Self::Target {
+        self.runtime
+    }
+}
+
+impl DerefMut for Runtime {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.runtime
+    }
+}
+impl From<SystemParam> for Runtime {
+    fn from(value: SystemParam) -> Self {
+        Self {
+            runtime: value.engine,
+        }
+    }
+}
+pub struct RuntimeFilterable;
+
+impl IntoSystemParalellFilter for Runtime {
+    fn get_filterable(&self) -> Box<dyn SystemParalellFilter> {
+        Box::new(RuntimeFilterable)
+    }
+}
+impl SystemParalellFilter for RuntimeFilterable {
+    fn filter_against_param(&self, _param: &Box<dyn SystemParalellFilter>) -> bool {
+        false
+    }
+}//
 pub struct EcsWorld {
     world: &'static mut World,
 }
@@ -189,3 +223,4 @@ impl DerefMut for EcsWorld {
         self.world
     }
 }
+

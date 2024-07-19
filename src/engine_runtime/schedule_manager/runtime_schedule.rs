@@ -29,28 +29,39 @@ generate_state_struct!(RuntimeScheduleResource {
     update: Schedule<RuntimeUpdateScheduleState> = "update" => Schedule::new("update", RuntimeUpdateScheduleState::init()),
 }, SCHEDULE_STATES);*/
 
-generate_state_struct_non_resource!(RuntimeUpdateScheduleData {
-    dt: Duration = "dt" => Duration::ZERO,
-    since_start: Duration = "since_start" => Duration::ZERO,
-});
 struct_with_default!(RuntimeUpdateSchedule {
     schedule_name: String = "update".into(),
     actions: Vec<Box<dyn ScheduleRunnable>> = Vec::default(),
     schedule_state: TypedAddr<RuntimeUpdateScheduleData> = TypedAddr::new_with_ref(RuntimeUpdateScheduleData::init()),
 });
+generate_state_struct_non_resource!(RuntimeUpdateScheduleData {
+    dt: Duration = "dt" => Duration::ZERO,
+    since_start: Duration = "since_start" => Duration::ZERO,
+});
 implement_schedule!(RuntimeUpdateSchedule);
 init_resource!(RuntimeUpdateSchedule);
 
-generate_state_struct_non_resource!(RuntimeEngineLoadScheduleData {
-    dummy: u32 = "dummy" => 0
-});
 struct_with_default!(RuntimeEngineLoadSchedule{
     schedule_name: String = "engine_load".into(),
     actions: Vec<Box<dyn ScheduleRunnable>> = Vec::default(),
     schedule_state: TypedAddr<RuntimeEngineLoadScheduleData> = TypedAddr::new_with_ref(RuntimeEngineLoadScheduleData::init())
 });
+generate_state_struct_non_resource!(RuntimeEngineLoadScheduleData {
+    dummy: u32 = "dummy" => 0
+});
 implement_schedule!(RuntimeEngineLoadSchedule);
 init_resource!(RuntimeEngineLoadSchedule);
+
+struct_with_default!(RuntimeEndFrameSchedule {
+    schedule_name: String = "end_frame".into(),
+    actions: Vec<Box<dyn ScheduleRunnable>> = Vec::default(),
+    schedule_state: TypedAddr<RuntimeEndFrameData> = TypedAddr::new_with_ref(RuntimeEndFrameData::init()),
+});
+generate_state_struct_non_resource!(RuntimeEndFrameData {
+    dummy: u32 = "dummy" => 0
+});
+implement_schedule!(RuntimeEndFrameSchedule);
+init_resource!(RuntimeEndFrameSchedule);
 
 pub trait IterExt {
     type T;

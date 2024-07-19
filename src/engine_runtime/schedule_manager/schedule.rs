@@ -95,7 +95,7 @@ macro_rules! implement_schedule {
 
                 let thread_num = thread::available_parallelism().unwrap().into_integer() - 1;
 
-                for i in 0..thread_num {
+                for _i in 0..thread_num {
                     let engine = TypedAddr::new_with_ref(engine);
                     let schedule_address = self.schedule_state.addr;
                     let tx = thread_tx.clone();
@@ -141,7 +141,7 @@ macro_rules! implement_schedule {
                                 executed.insert(id);
 
                                 if executed.len() == ids.len() {
-                                    for i in 0..thread_num {
+                                    for _i in 0..thread_num {
                                         main_tx.send(MainToThreadExecutorMsg::Kill).unwrap();
                                     }
                                     shall_run = false;
@@ -179,7 +179,7 @@ macro_rules! implement_schedule {
                     }
                 }
                 for join in thread_join {
-                    join.join();
+                    let _ = join.join();
                 }
                 //dbg!(pre.elapsed());
             }
