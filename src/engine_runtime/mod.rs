@@ -74,17 +74,11 @@ impl EngineRuntime {
         x?;
         Some(TypedAddr::new(*x.unwrap()).get())
     }
-    pub fn get_resource<T: EngineResource>(&mut self) -> &'static mut T {
-        let x = self.static_resource_map.get(&TypeId::of::<T>());
-
-        let address = if x.is_none() {
-            let addr: TypedAddr<_> = T::init(self).into();
-            addr.addr
-        } else {
-            *x.unwrap()
-        };
-
-        TypedAddr::new(address).get()
+    pub fn get_resource_mut<T: EngineResource>(&'static mut self) -> &'static mut T {
+        T::get_mut(self)
+    }
+    pub fn get_resource<T: EngineResource>(&'static mut self) -> &'static T {
+        T::get(self)
     }
 }
 #[derive(Default)]

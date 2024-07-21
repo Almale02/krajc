@@ -1,11 +1,10 @@
-use crate::engine_runtime::{EngineRuntime};
+use crate::engine_runtime::EngineRuntime;
 use crate::rendering::buffer_manager::managed_buffer::ManagedBuffer;
 use crate::rendering::managers::RenderManagerResource;
 
-use crate::{addr_ptr_to_ref_mut};
+use crate::addr_ptr_to_ref_mut;
 use std::any::TypeId;
 use std::collections::HashMap;
-
 
 use super::managed_buffer::ManagedBufferGeneric;
 
@@ -20,11 +19,11 @@ impl BufferManager {
             buffers: Default::default(),
         }
     }
-    pub fn register_new_buffer<T: ManagedBufferGeneric + Default + 'static>(&mut self) {
+    pub fn register_new_buffer<T: ManagedBufferGeneric + Default + 'static>(&'static mut self) {
         self.buffers.insert(
             TypeId::of::<T>(),
             Box::leak(Box::new(T::default()))
-                .get_managed_buffer(self.engine.get_resource::<RenderManagerResource>()),
+                .get_managed_buffer(self.engine.get_resource_mut::<RenderManagerResource>()),
         );
     }
     pub fn get_buffer<T: ManagedBufferGeneric + 'static>(&'static self) -> &'static ManagedBuffer {

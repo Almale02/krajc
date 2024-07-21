@@ -72,13 +72,19 @@ macro_rules! implement_schedule {
                     schedule_name: name.to_string(),
                     actions: Vec::default(),
                     schedule_state: TypedAddr::new(schedule_state_addr),
+                    dep_graph: DepGraph::default(),
                 }
             }
-
+            pub fn calc_dep_graph(&'static mut self, engine: &mut EngineRuntime) {
+                let start = std::time::Instant::now();
+                self.dep_graph = calc_dep_graph(&mut self.actions, dupe(engine));
+                dbg!(start.elapsed());
+            }
             pub fn execute(&'static mut self, engine: &'static mut EngineRuntime) {
-                dbg!(engine.paralellism);
+                //dbg!(engine.paralellism);
                 if !engine.paralellism {
                     single_thread_scheduler(engine, &mut self.actions, self.schedule_state.addr);
+
                     return;
                 }
 
@@ -87,7 +93,8 @@ macro_rules! implement_schedule {
 
                 let mut thread_join = vec![];
 
-                let (dep_graph, ids) = calc_dep_graph(&mut self.actions, dupe(engine));
+                let (dep_graph, ids) = &mut self.dep_graph; //calc_dep_graph(&mut self.actions, dupe(engine));
+                                                            //dbg!(dep_graph.clone());
 
                 let mut to_execute = HashSet::new();
                 let mut executed = HashSet::new();

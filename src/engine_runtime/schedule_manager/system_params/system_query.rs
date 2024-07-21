@@ -61,7 +61,7 @@ where
 
 impl<Data: QueryData, Filter: QueryFilter> SystemQuery<Data, Filter> {
     #[inline]
-    pub fn iter<'w, 's>(&'s mut self) -> QueryIter<'w, 's, Data::ReadOnly, Filter> {
+    pub fn iter<'w>(&'w mut self) -> QueryIter<'w, 'w, Data::ReadOnly, Filter> {
         self.provider.iter(dupe(self.world))
     }
 
@@ -70,22 +70,25 @@ impl<Data: QueryData, Filter: QueryFilter> SystemQuery<Data, Filter> {
     /// This iterator is always guaranteed to return results from each matching entity once and only once.
     /// Iteration order is not guaranteed.
     #[inline]
-    pub fn iter_mut<'w, 's>(&'s mut self) -> QueryIter<'w, 's, Data, Filter> {
-        self.provider.iter_mut(dupe(self.world))
+    pub fn iter_mut<'w>(&'w mut self) -> QueryIter<'w, 'w, Data, Filter> {
+        self.provider.iter_mut(self.world)
     }
     #[inline]
-    pub fn get<'w>(&mut self, entity: Entity) -> Result<ROQueryItem<'w, Data>, QueryEntityError> {
-        self.provider.get(dupe(self.world), entity)
+    pub fn get<'w>(
+        &'w mut self,
+        entity: Entity,
+    ) -> Result<ROQueryItem<'w, Data>, QueryEntityError> {
+        self.provider.get(self.world, entity)
     }
     #[inline]
-    pub fn get_mut<'w>(&mut self, entity: Entity) -> Result<Data::Item<'w>, QueryEntityError> {
-        self.provider.get_mut(dupe(self.world), entity)
+    pub fn get_mut<'w>(&'w mut self, entity: Entity) -> Result<Data::Item<'w>, QueryEntityError> {
+        self.provider.get_mut(self.world, entity)
     }
 
     #[track_caller]
     #[inline]
-    pub fn single<'w>(&mut self) -> ROQueryItem<'w, Data> {
-        self.provider.single(dupe(self.world))
+    pub fn single<'w>(&'w mut self) -> ROQueryItem<'w, Data> {
+        self.provider.single(self.world)
     }
 
     /// Returns a single immutable query result when there is exactly one entity matching
@@ -97,8 +100,8 @@ impl<Data: QueryData, Filter: QueryFilter> SystemQuery<Data, Filter> {
     /// If the number of query results is not exactly one, a [`QuerySingleError`] is returned
     /// instead.
     #[inline]
-    pub fn get_single<'w>(&mut self) -> Result<ROQueryItem<'w, Data>, QuerySingleError> {
-        self.provider.get_single(dupe(self.world))
+    pub fn get_single<'w>(&'w mut self) -> Result<ROQueryItem<'w, Data>, QuerySingleError> {
+        self.provider.get_single(self.world)
     }
 
     /// Returns a single mutable query result when there is exactly one entity matching
@@ -110,8 +113,8 @@ impl<Data: QueryData, Filter: QueryFilter> SystemQuery<Data, Filter> {
     /// [`get_single_mut`](Self::get_single_mut) to return a `Result` instead of panicking.
     #[track_caller]
     #[inline]
-    pub fn single_mut<'w>(&mut self) -> Data::Item<'w> {
-        self.provider.single_mut(dupe(self.world))
+    pub fn single_mut<'w>(&'w mut self) -> Data::Item<'w> {
+        self.provider.single_mut(self.world)
     }
 
     /// Returns a single mutable query result when there is exactly one entity matching
@@ -120,8 +123,48 @@ impl<Data: QueryData, Filter: QueryFilter> SystemQuery<Data, Filter> {
     /// If the number of query results is not exactly one, a [`QuerySingleError`] is returned
     /// instead.
     #[inline]
-    pub fn get_single_mut<'w>(&mut self) -> Result<Data::Item<'w>, QuerySingleError> {
-        self.provider.get_single_mut(dupe(self.world))
+    pub fn get_single_mut<'w>(&'w mut self) -> Result<Data::Item<'w>, QuerySingleError> {
+        self.provider.get_single_mut(self.world)
+    }
+
+    /// Returns the read-only query results for the given array of [`Entity`].
+    ///
+    /// In case of a nonexisting entity or mismatched component, a [`QueryEntityError`] is
+    /// returned instead.
+    ///
+    /// Note that the unlike [`QueryState::get_many_mut`], the entities passed in do not need to be unique.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use bevy_ecs::prelude::*;
+    /// use bevy_ecs::query::QueryEntityError;
+    ///
+    /// #[derive(Component, PartialEq, Debug)]
+    /// struct A(usize);
+    ///
+    /// let mut world = World::new();
+    /// let entity_vec: Vec<Entity> = (0..3).map(|i|world.spawn(A(i)).id()).collect();
+    /// let entities: [Entity; 3] = entity_vec.try_into().unwrap();
+    ///
+    /// world.spawn(A(73));
+    ///
+    /// let mut query_state = world.query::<&A>();
+    ///
+    /// let component_values = query_state.get_many(&world, entities).unwrap();
+    ///
+    /// assert_eq!(component_values, [&A(0), &A(1), &A(2)]);
+    ///
+    /// let wrong_entity = Entity::from_raw(365);
+    ///
+    /// assert_eq!(query_state.get_many(&world, [wrong_entity]), Err(QueryEntityError::NoSuchEntity(wrong_entity)));
+    /// ```
+    #[inline]
+    pub fn get_many<'w, const N: usize>(
+        &'w mut self,
+        entities: [Entity; N],
+    ) -> Result<[ROQueryItem<'w, Data>; N], QueryEntityError> {
+        self.provider.get_many(&self.world, entities)
     }
 }
 
@@ -132,7 +175,7 @@ where
 {
     fn from(value: SystemParam) -> Self {
         let world = &mut value.engine.ecs.world;
-        let provider = QueryBuilder::<Data, Filter>::new(world).build();
+        let provider = world.query_filtered::<Data, Filter>();
 
         SystemQuery {
             _d: PhantomData,
@@ -193,7 +236,7 @@ impl SystemParalellFilter for RuntimeFilterable {
     fn filter_against_param(&self, _param: &Box<dyn SystemParalellFilter>) -> bool {
         false
     }
-}//
+} //
 pub struct EcsWorld {
     world: &'static mut World,
 }
@@ -223,4 +266,3 @@ impl DerefMut for EcsWorld {
         self.world
     }
 }
-

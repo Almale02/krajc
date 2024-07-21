@@ -31,8 +31,8 @@ where
     pub addr: TypedAddr<T>,
 }
 impl<T: EngineResource> Res<T> {
-    pub fn find_addr(&mut self, engine: &mut EngineRuntime) {
-        let address = engine.get_resource::<T>();
+    pub fn find_addr(&mut self, engine: &'static mut EngineRuntime) {
+        let address = engine.get_resource_mut::<T>();
         self.addr = TypedAddr::new_with_ref(address);
     }
 }
@@ -60,41 +60,7 @@ impl<T: EngineResource> Res<T> {
         self.addr.get()
     }
 }
-#[macro_export]
-macro_rules! init_resource {
-    ($res: ty) => {
-        impl EngineResource for $res {
-            fn init(engine: &mut EngineRuntime) -> &'static mut Self {
-                let mgr = Box::new(Self::default());
-                let leaked = Box::leak(mgr);
-                let raw = leaked as *mut _;
-                let schedule_state_addr = raw as usize;
-                engine
-                    .static_resource_map
-                    .insert(std::any::TypeId::of::<$res>(), schedule_state_addr);
-
-                leaked
-            }
-        }
-    };
-    ($res: ty, $typed_addr_static: expr) => {
-        impl $crate::EngineResource for $res {
-            fn init(engine: &mut EngineRuntime) -> &'static mut Self {
-                let mgr = Box::new(Self::default());
-                let leaked = Box::leak(mgr);
-                let raw = leaked as *mut _;
-
-                let schedule_state_addr = raw as usize;
-                unsafe { $typed_addr_static.addr = schedule_state_addr }
-                engine
-                    .static_resource_map
-                    .insert(std::any::TypeId::of::<$res>(), schedule_state_addr);
-
-                leaked
-            }
-        }
-    };
-}
 pub trait EngineResource {
-    fn init(engine: &mut EngineRuntime) -> &'static mut Self;
+    fn get_mut(engine: &'static mut EngineRuntime) -> &'static mut Self;
+    fn get(engine: &'static mut EngineRuntime) -> &'static Self;
 }

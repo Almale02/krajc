@@ -115,7 +115,7 @@ pub fn system_fn(attr: TokenStream, item: TokenStream) -> TokenStream {
         #[allow(macro_expanded_macro_exports_accessed_by_absolute_paths)]
         macro_rules! #fn_name {
             ($runtime: expr) => {
-                $runtime.get_resource::<#type_param>().register(Box::new( ("#fn_name", Box::new(#fn_name) as Box<dyn Fn(#macro_invocation)>, Vec::default())))
+                $crate::typed_addr::dupe($runtime).get_resource_mut::<#type_param>().register(Box::new( ("#fn_name", Box::new(#fn_name) as Box<dyn Fn(#macro_invocation)>, Vec::default())))
             };
         }
 
@@ -230,6 +230,58 @@ fn impl_comp(ast: &syn::DeriveInput) -> TokenStream {
     let name = &ast.ident;
     let gen = quote! {
         impl legion::internals::world::Comp for #name {}
+
+    };
+    gen.into()
+}
+
+#[proc_macro_derive(EngineResource)]
+pub fn res_derive(input: TokenStream) -> TokenStream {
+    let ast = syn::parse(input).unwrap();
+
+    impl_res(&ast)
+}
+fn impl_res(ast: &syn::DeriveInput) -> TokenStream {
+    let name = &ast.ident;
+    let gen = quote! {
+
+    /*use crate::EngineRuntime;
+    use crate::TypedAddr;
+    use std::any::TypeId;*/
+
+
+    impl EngineResource for #name {
+        fn get_mut(engine: &mut crate::EngineRuntime) -> &'static mut Self {
+            crate::TypedAddr::new({
+                let op = engine.static_resource_map.get_mut(&std::any::TypeId::of::<Self>());
+                match op {
+                    Some(val) => *val,
+                    None => {
+                        let new = Box::leak(Box::new(#name::default()));
+                        let addr = crate::TypedAddr::new_with_ref(new).addr;
+                        engine.static_resource_map.insert(std::any::TypeId::of::<Self>(), addr);
+                        addr
+                    }
+                }
+            })
+            .get()
+        }
+        fn get(engine: &mut crate::EngineRuntime) -> &'static Self {
+            crate::TypedAddr::new({
+                let op = engine.static_resource_map.get_mut(&std::any::TypeId::of::<Self>());
+                match op {
+                    Some(val) => *val,
+                    None => {
+                        let new = Box::leak(Box::new(#name::default()));
+                        let addr = crate::TypedAddr::new_with_ref(new).addr;
+                        engine.static_resource_map.insert(std::any::TypeId::of::<Self>(), addr);
+                        addr
+                    }
+                }
+            })
+            .get()
+        }
+    }
 
     };
     gen.into()

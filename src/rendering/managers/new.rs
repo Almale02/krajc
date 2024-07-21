@@ -71,7 +71,7 @@ impl EngineRuntime {
             contents: bytemuck::cast_slice(&[camera_uniform]),
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         });
-        let render_state = unsafe { ENGINE_RUNTIME.get().get_resource::<RenderManagerResource>() };
+        let render_state = unsafe { ENGINE_RUNTIME.get().get_resource_mut::<RenderManagerResource>() };
 
         render_state.device.init(device);
         let device = &render_state.device;

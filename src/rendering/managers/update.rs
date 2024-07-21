@@ -19,7 +19,8 @@ impl EngineRuntime {
         let _dt_f64 = dt.as_secs_f64();
         let engine = unsafe { ENGINE_RUNTIME.get() };
         {
-            let runtime_schedule_state: &mut RuntimeUpdateSchedule = engine.get_resource();
+            let runtime_schedule_state: &mut RuntimeUpdateSchedule =
+                dupe(engine).get_resource_mut();
             let update_state = runtime_schedule_state.schedule_state.get();
 
             *update_state.dt = dt;
@@ -27,10 +28,12 @@ impl EngineRuntime {
 
             runtime_schedule_state.execute(dupe(engine));
         }
-        {
+        /*{
             let schedule = engine.get_resource::<RuntimeEndFrameSchedule>();
-            let schedule_data = schedule.schedule_state.get();
-        }
+            //let schedule_data = schedule.schedule_state.get();
+            schedule.execute(dupe(engine));
+        }*/
+        self.ecs.world.clear_trackers();
     }
 }
 

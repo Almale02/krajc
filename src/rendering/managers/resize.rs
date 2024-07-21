@@ -4,7 +4,7 @@ use super::RenderManagerResource;
 
 impl EngineRuntime {
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
-        let state = unsafe { ENGINE_RUNTIME.get().get_resource::<RenderManagerResource>() };
+        let state = unsafe { ENGINE_RUNTIME.get().get_resource_mut::<RenderManagerResource>() };
         if new_size.width > 0 && new_size.height > 0 {
             *state.size = new_size;
             state.config.width = new_size.width;

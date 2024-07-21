@@ -2,15 +2,19 @@
 #![feature(negative_impls)]
 
 use crate::rendering::systems::general::update_rendering;
+use bevy_ecs::{change_detection::DetectChanges, component::Component, query::Changed, world::Ref};
 use krajc::{system_fn, Comp};
 
 //pub type QueryFilter<A, B = Passthrough> = EntityFilterTuple<A, B>;
 
-use physics::systems::step_physics;
+use physics::systems::{
+    handle_rigidbody_insert, physics_systems, step_physics, sync_fixed_bodies_to_rapier,
+    sync_physics_transform,
+};
 use pollster::FutureExt;
 use rapier3d::{
     math::Translation,
-    na::{Isometry3, Translation2, UnitQuaternion},
+    na::{Isometry3, Transform3, Translation2, UnitQuaternion, Vector3 as Vector},
 };
 use typed_addr::{dupe, TypedAddr};
 
@@ -26,8 +30,8 @@ use cgmath::{Deg, Point3, Rad, Vector3};
 use engine_runtime::{
     schedule_manager::{
         runtime_schedule::{
-            RuntimeEndFrameSchedule, RuntimeEngineLoadScheduleData, RuntimeUpdateSchedule,
-            RuntimeUpdateScheduleData,
+            DepGraph, RuntimeEndFrameSchedule, RuntimeEngineLoadScheduleData,
+            RuntimeUpdateSchedule, RuntimeUpdateScheduleData,
         },
         schedule::ScheduleRunnable,
         system_params::{
@@ -46,9 +50,10 @@ use rendering::{
     buffer_manager::{managed_buffer::ManagedBufferGeneric, InstanceBufferType, UniformBufferType},
     camera::camera::Camera,
     managers::RenderManagerResource,
+    material::update_texture_material,
     mesh::mesh::Mesh,
     render_entity::{instancing::TestInstanceSchemes, render_entity::TextureMaterialInstance},
-    systems::general::Transform,
+    systems::general::{move_stuff_up, Transform},
 };
 
 use wgpu::{Buffer, BufferUsages, RenderBundle, SurfaceError};
@@ -72,23 +77,23 @@ fn main() {
     run().block_on();
 }
 
+#[derive(Component)]
+pub struct Marker;
+
 #[system_fn(RuntimeEngineLoadSchedule)]
-fn startup(
-    mut query: SystemQuery<&mut TextureMaterialInstance>,
-    mut world: EcsWorld,
-    mut render: Res<RenderManagerResource>,
-) {
+fn startup(mut world: EcsWorld, mut render: Res<RenderManagerResource>) {
     dbg!("ran startup");
-    let mut entities: Vec<(TextureMaterialInstance,)> = vec![];
+    let mut entities: Vec<(Transform, Marker)> = vec![];
 
     let width = 99;
     let height = 99;
 
     for y in 0..height {
         for x in 0..width {
-            entities.push((TextureMaterialInstance::from_pos(Vec3::new(
-                x as f32, 0., y as f32,
-            )),))
+            entities.push((
+                Transform::new_vec(Vector::new(x as f32, 0., y as f32)),
+                Marker,
+            ));
         }
     }
 
@@ -103,13 +108,8 @@ fn startup(
     );
 
     world.spawn((Transform::new(Isometry3::from_parts(trans, quat)), Camera));
-    dbg!("ran push");
 
     let render = render.get_static_mut();
-
-    let query = query.iter().collect::<Vec<_>>();
-    //let instance_data = query2.iter().map(|arg| arg.to_raw()).collect::<Vec<_>>();
-    dupe(render).material.set_instance_value_ref(query);
 
     let mesh = Mesh::build_cube(&render.device, 1., 1., 1.);
 
@@ -122,8 +122,6 @@ fn fps_logger(
     update: SchedData<RuntimeUpdateScheduleData>,
     mut prev_full_sec: Local<u64>,
     mut render_state: Res<RenderManagerResource>,
-
-    mut world: EcsWorld,
 ) {
     let render_state = render_state.get_static_mut();
 
@@ -137,21 +135,17 @@ fn fps_logger(
 }
 
 pub async fn run() {
-    let mut runtime = EngineRuntime::init();
+    let runtime = EngineRuntime::init();
 
     runtime.buffer_manager.engine = unsafe { ENGINE_RUNTIME.get() };
-    runtime
+    dupe(runtime)
         .buffer_manager
         .register_new_buffer::<UniformBufferType>();
-    runtime
+    dupe(runtime)
         .buffer_manager
         .register_new_buffer::<InstanceBufferType>();
 
-    let render_states = runtime.get_resource::<RenderManagerResource>();
-    fps_logger!(runtime);
-    update_rendering!(runtime);
-    startup!(runtime);
-    step_physics!(runtime);
+    let render_states = dupe(runtime).get_resource_mut::<RenderManagerResource>();
 
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new()
@@ -163,6 +157,33 @@ pub async fn run() {
 
     EngineRuntime::init_rendering(window).await;
 
+    startup!(runtime);
+    fps_logger!(runtime);
+    update_rendering!(runtime);
+
+    update_texture_material!(runtime);
+
+    physics_systems(runtime);
+    //update_texture_material!(runtime);
+    /*step_physics!(runtime);
+    sync_physics_transform!(runtime);
+    sync_fixed_bodies_to_rapier!(runtime);
+    handle_rigidbody_insert!(runtime);*/
+
+    move_stuff_up!(runtime);
+
+    dupe(runtime)
+        .get_resource_mut::<RuntimeUpdateSchedule>()
+        .calc_dep_graph(runtime);
+
+    dupe(runtime)
+        .get_resource_mut::<RuntimeEngineLoadSchedule>()
+        .calc_dep_graph(runtime);
+
+    dupe(runtime)
+        .get_resource_mut::<RuntimeEndFrameSchedule>()
+        .calc_dep_graph(runtime);
+
     env_logger::init();
 
     let mut last_render_time = Instant::now();
@@ -171,10 +192,10 @@ pub async fn run() {
     let mut prev_full_sec = 0_u64;
     let window_ref = render_states.window.get_ref();
 
-    let load = runtime.get_resource::<RuntimeEngineLoadSchedule>();
+    let load = dupe(runtime).get_resource_mut::<RuntimeEngineLoadSchedule>();
     load.execute(dupe(runtime));
 
-    render_states.material.register_systems(&mut runtime);
+    //render_states.material.register_systems(runtime);
     event_loop.run(move |event, _window_target, control_flow| match event {
         Event::DeviceEvent {
              event: DeviceEvent::MouseMotion{ delta, },
@@ -291,6 +312,15 @@ impl From<Point3<f32>> for Vec3 {
         Self::new(value.x, value.y, value.z)
     }
 }
+impl From<Transform> for Vec3 {
+    fn from(value: Transform) -> Self {
+        Self::new(
+            value.translation.x,
+            value.translation.y,
+            value.translation.z,
+        )
+    }
+}
 
 impl Eq for Vec3 {}
 
@@ -308,10 +338,10 @@ create_system!(new_system(a: i32) {
 #[macro_export]
 macro_rules! generate_state_struct{
     ($struct_name:ident { $($field:ident: $type:ty = $value:expr),* $(,)? }) => {
+        #[derive(krajc::EngineResource)]
         pub struct $struct_name {
             $(pub $field: GenericStateRefTemplate<$type>),*
         }
-        $crate::init_resource!($struct_name);
 
         impl $struct_name {
             pub fn new() -> Self {
@@ -415,6 +445,7 @@ macro_rules! generate_state_struct_non_resource {
 #[macro_export]
 macro_rules! struct_with_default {
     ($struct_name:ident { $($field:ident: $type:ty = $init_value: expr),* $(,)? }) => {
+        #[derive(krajc::EngineResource)]
         pub struct $struct_name {
             $(pub $field: $type),*
         }
@@ -426,6 +457,7 @@ macro_rules! struct_with_default {
                 }
             }
         }
+
     };
 }
 enum LateinitEnum<T> {
