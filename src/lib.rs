@@ -115,7 +115,7 @@ pub fn system_fn(attr: TokenStream, item: TokenStream) -> TokenStream {
         #[allow(macro_expanded_macro_exports_accessed_by_absolute_paths)]
         macro_rules! #fn_name {
             ($runtime: expr) => {
-                $crate::typed_addr::dupe($runtime).get_resource_mut::<#type_param>().register(Box::new( ("#fn_name", Box::new(#fn_name) as Box<dyn Fn(#macro_invocation)>, Vec::default())))
+                $crate::rendering::buffer_manager::dupe($runtime).get_resource_mut::<#type_param>().register(Box::new( ("#fn_name", Box::new(#fn_name) as Box<dyn Fn(#macro_invocation)>, Vec::default())))
             };
         }
 
@@ -243,46 +243,65 @@ pub fn res_derive(input: TokenStream) -> TokenStream {
 }
 fn impl_res(ast: &syn::DeriveInput) -> TokenStream {
     let name = &ast.ident;
+
+    let (impl_generics, type_generics, where_clause) = &ast.generics.split_for_impl();
+
     let gen = quote! {
 
-    /*use crate::EngineRuntime;
-    use crate::TypedAddr;
-    use std::any::TypeId;*/
+            /*use crate::EngineRuntime;
+            use crate::TypedAddr;
+            use std::any::TypeId;*/
 
+    impl #impl_generics EngineResource for #name #type_generics #where_clause {
+        fn get_mut<'er>(engine: &'er mut crate::engine_runtime::EngineRuntime<'er>) -> &'er mut Self {
+            let op = dupe(engine)
+                .static_resource_map
+                .get_mut(&std::any::TypeId::of::<Self>());
+            match op {
+                Some(val) => unsafe { val.downcast_mut_unchecked() },
+                None => {
+                    dupe(engine).static_resource_map.insert(
+                        std::any::TypeId::of::<Self>(),
+                        Box::new(#name::default()),
+                    );
 
-    impl EngineResource for #name {
-        fn get_mut(engine: &mut crate::EngineRuntime) -> &'static mut Self {
-            crate::TypedAddr::new({
-                let op = engine.static_resource_map.get_mut(&std::any::TypeId::of::<Self>());
-                match op {
-                    Some(val) => *val,
-                    None => {
-                        let new = Box::leak(Box::new(#name::default()));
-                        let addr = crate::TypedAddr::new_with_ref(new).addr;
-                        engine.static_resource_map.insert(std::any::TypeId::of::<Self>(), addr);
-                        addr
+                    unsafe {
+                        dupe(engine)
+                            .static_resource_map
+                            .get_mut(&std::any::TypeId::of::<Self>())
+                            .unwrap()
+                            .downcast_mut_unchecked()
                     }
                 }
-            })
-            .get()
+            }
         }
-        fn get(engine: &mut crate::EngineRuntime) -> &'static Self {
-            crate::TypedAddr::new({
-                let op = engine.static_resource_map.get_mut(&std::any::TypeId::of::<Self>());
-                match op {
-                    Some(val) => *val,
-                    None => {
-                        let new = Box::leak(Box::new(#name::default()));
-                        let addr = crate::TypedAddr::new_with_ref(new).addr;
-                        engine.static_resource_map.insert(std::any::TypeId::of::<Self>(), addr);
-                        addr
+        fn get<'er>(engine: &'er mut crate::engine_runtime::EngineRuntime<'er>) -> &'er Self {
+            let op = crate::rendering::buffer_manager::dupe(engine)
+                .static_resource_map
+                .get_mut(&std::any::TypeId::of::<Self>());
+            match op {
+                Some(val) => unsafe { val.downcast_mut_unchecked() },
+                None => {
+                    //let addr = crate::TypedAddr::new_with_ref(new).addr;
+                    crate::rendering::buffer_manager::dupe(engine).static_resource_map.insert(
+                        std::any::TypeId::of::<Self>(),
+                        Box::new(#name::default()),
+                    );
+
+                    unsafe {
+                        crate::rendering::buffer_manager::dupe(engine)
+                            .static_resource_map
+                            .get_mut(&std::any::TypeId::of::<Self>())
+                            .unwrap()
+                            .downcast_mut_unchecked()
                     }
                 }
-            })
-            .get()
+            }
         }
     }
 
-    };
+
+
+            };
     gen.into()
 }

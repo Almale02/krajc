@@ -12,8 +12,8 @@ use super::{
     system_resource::{EngineResource, Res},
 };
 
-pub struct SystemParam {
-    pub engine: &'static mut EngineRuntime,
+pub struct SystemParam<'w> {
+    pub engine: &'w mut EngineRuntime<'w>,
     pub schedule_data: usize,
     pub position: u8,
     pub fn_name: &'static str,
@@ -30,7 +30,7 @@ pub trait SystemParalellFilter: mopa::Any {
     fn filter_against_param(&self, param: &Box<dyn SystemParalellFilter>) -> bool;
 }
 
-impl<T: EngineResource> From<SystemParam> for Res<T> {
+impl<'w, T: EngineResource> From<SystemParam<'w>> for Res<T> {
     fn from(value: SystemParam) -> Self {
         let engine = value.engine;
         let mut new_self = Res::<T> {
@@ -44,11 +44,12 @@ impl<T: EngineResource> From<SystemParam> for Res<T> {
 
 macro_rules! impl_schedule_runnable {
     ($($param:ident),*) => {
-        impl<$($param),*> ScheduleRunnable for (&'static str, Box<dyn Fn($($param),*)>, Vec<Box<dyn SystemParalellFilter>>)
+        impl<'a, $($param),*> ScheduleRunnable for (&'static str, Box<dyn Fn($($param),*)>, Vec<Box<dyn SystemParalellFilter>>)
         where
-            $($param: From<SystemParam> + IntoSystemParalellFilter + 'static),*
+            'a: 'static,
+            $($param: From<SystemParam<'a>> + IntoSystemParalellFilter + 'static),*
         {
-            fn run(&mut self, runtime: &'static mut EngineRuntime, schedule_state: usize) {
+            fn run<'w>(&mut self, runtime: &'w mut EngineRuntime<'w>, schedule_state: usize) {
                 let runtime = TypedAddr::<EngineRuntime>::new(runtime as *mut _ as usize);
                 let mut position = 0;
                 // Call the function
@@ -68,7 +69,7 @@ macro_rules! impl_schedule_runnable {
                     )*
                 );
             }
-            fn setup_filter(&mut self, runtime: &'static mut EngineRuntime, schedule_state: usize) {
+            fn setup_filter<'w>(&mut self, runtime: &'w mut EngineRuntime<'w>, schedule_state: usize) {
                 let runtime = TypedAddr::<EngineRuntime>::new(runtime as *mut _ as usize);
                 let mut position = 0;
                     $(
@@ -84,7 +85,7 @@ macro_rules! impl_schedule_runnable {
                     )*
 
             }
-            fn predicate(&self, _runtime: &'static EngineRuntime, _schedule_state: usize) -> bool {
+            fn predicate<'w>(&self, _runtime: &'w EngineRuntime, _schedule_state: usize) -> bool {
                 true
             }
             fn name(&self) -> &'static str {

@@ -23,8 +23,8 @@ impl<T: Default> DerefMut for Local<T> {
         self.addr.get()
     }
 }
-impl<T: Default> From<SystemParam> for Local<T> {
-    fn from(value: SystemParam) -> Self {
+impl<'w, T: Default> From<SystemParam<'w>> for Local<T> {
+    fn from(value: SystemParam<'w>) -> Self {
         let map = value.engine.system_locals.entry(value.fn_name).or_default();
 
         let any = map.entry(value.position).or_insert(Box::<T>::default());

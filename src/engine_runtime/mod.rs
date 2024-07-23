@@ -2,6 +2,12 @@ use core::panic;
 use std::{
     any::{Any, TypeId},
     collections::HashMap,
+    marker::PhantomData,
+};
+
+use engine_data::{
+    data_refs::{EngineDataMut, EngineDataRef},
+    data_storage::EngineDataStorage,
 };
 
 use crate::{
@@ -12,34 +18,31 @@ use crate::{
     ENGINE_RUNTIME,
 };
 
-use self::{
-    engine_state_manager::{generic_state_manager::GenericStateManager, EngineStateManager},
-    schedule_manager::system_params::system_resource::EngineResource,
-};
+use self::schedule_manager::system_params::system_resource::EngineResource;
 
-pub mod engine_state_manager;
+pub mod engine_data;
 pub mod schedule_manager;
 
-pub struct EngineRuntime {
+pub struct EngineRuntime<'w> {
     pub paralellism: bool,
-    pub state: EngineStateManager,
-    pub static_resource_map: HashMap<TypeId, usize>,
+    pub engine_data: EngineDataStorage<'w>,
+    pub static_resource_map: HashMap<TypeId, Box<dyn Any>>,
     pub system_locals: HashMap<&'static str, HashMap<u8, Box<dyn Any>>>,
-    pub buffer_manager: BufferManager,
+    pub buffer_manager: BufferManager<'w>,
     pub ecs: EcsManager,
     pub physics: PhysicsWorld,
+    _w: PhantomData<&'w ()>,
 }
 
-impl Default for EngineRuntime {
+impl<'w: 'static> Default for EngineRuntime<'w> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl EngineRuntime {
+impl<'w: 'static> EngineRuntime<'w> {
     pub fn new() -> Self {
         Self {
-            physics: PhysicsWorld::default(),
             paralellism: {
                 match std::env::var("KRAJC_PARALLELISM") {
                 Ok(value) => {match value.as_str() {
@@ -50,40 +53,27 @@ impl EngineRuntime {
                 Err(_) => true/*{true}*/,
             }
             },
-            state: EngineStateManager {
-                generic: GenericStateManager::new(),
-            },
+            engine_data: EngineDataStorage::new(),
             static_resource_map: Default::default(),
             system_locals: Default::default(),
             buffer_manager: BufferManager::new(),
             ecs: EcsManager::default(),
+            physics: PhysicsWorld::default(),
+            _w: PhantomData,
         }
     }
-    pub fn init() -> &'static mut Self {
-        let mgr = Box::new(Self::new());
-        let leaked = Box::leak(mgr);
-        let raw = leaked as *mut _;
-        let render_states_addr = raw as usize;
-        unsafe { ENGINE_RUNTIME.addr = render_states_addr }
-
-        leaked
-    }
-    pub fn get_resource_without_insert<T>(&self) -> Option<&'static mut T> {
-        let x = self.static_resource_map.get(&TypeId::of::<T>());
-
-        x?;
-        Some(TypedAddr::new(*x.unwrap()).get())
-    }
-    pub fn get_resource_mut<T: EngineResource>(&'static mut self) -> &'static mut T {
+    pub fn get_resource_mut<T: EngineResource>(&'w mut self) -> &'w mut T {
         T::get_mut(self)
     }
-    pub fn get_resource<T: EngineResource>(&'static mut self) -> &'static T {
+    pub fn get_resource<T: EngineResource>(&'w mut self) -> &'w T {
         T::get(self)
     }
-}
-#[derive(Default)]
-pub struct StateNames {
-    pub render_mgr: RenderManagerResource,
+    pub fn new_data<T: 'static>(&'w mut self, data: T) -> EngineDataRef<'w, T> {
+        self.engine_data.create_new(data)
+    }
+    pub fn new_data_mut<T: 'static>(&'w mut self, data: T) -> EngineDataMut<'w, T> {
+        self.engine_data.create_new_mut(data)
+    }
 }
 impl<T> From<&mut T> for TypedAddr<T> {
     fn from(value: &mut T) -> Self {

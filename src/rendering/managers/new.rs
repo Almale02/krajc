@@ -13,7 +13,10 @@ use crate::{
     engine_runtime::EngineRuntime,
     rendering::{
         aspect_ratio::AspectUniform,
-        buffer_manager::managed_buffer::{ManagedBufferGeneric, ManagedBufferInstanceHandle},
+        buffer_manager::{
+            dupe, dupe_static,
+            managed_buffer::{ManagedBufferGeneric, ManagedBufferInstanceHandle},
+        },
         camera::camera::{CameraController, CameraUniform, Projection},
         material::TextureMaterial,
         mesh::mesh::TextureVertex,
@@ -28,8 +31,8 @@ use crate::{
 
 use super::RenderManagerResource;
 
-impl EngineRuntime {
-    pub async fn init_rendering(window: Window) {
+impl<'w: 'static> EngineRuntime<'w> {
+    pub async fn init_rendering(&'w mut self, window: Window) {
         let size = window.inner_size();
 
         // The instance is a handle to our GPU
@@ -71,9 +74,13 @@ impl EngineRuntime {
             contents: bytemuck::cast_slice(&[camera_uniform]),
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         });
-        let render_state = unsafe { ENGINE_RUNTIME.get().get_resource_mut::<RenderManagerResource>() };
+        let render_state = unsafe {
+            ENGINE_RUNTIME
+                .get()
+                .get_resource_mut::<RenderManagerResource>()
+        };
 
-        render_state.device.init(device);
+        render_state.device.set(device);
         let device = &render_state.device;
 
         let instance_scheme = TestInstanceSchemes::row(1);
@@ -81,12 +88,18 @@ impl EngineRuntime {
             "instance_buffer".to_owned(),
             //4092u64.pow(2),
             268435456,
+            dupe(self),
         );
 
         let camera_buffer = ManagedBufferInstanceHandle::<UniformBufferType>::new_with_init(
             "camera_buffer".to_owned(),
             camera_uniform,
+            dupe(self),
         );
+
+        render_state.camera_buffer.set(camera_buffer);
+        let camera_buffer = &mut render_state.camera_buffer;
+
         let camera_buffer_actual = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("camera_buffer"),
             contents: bytemuck::cast_slice(&[camera_uniform]),
@@ -252,30 +265,29 @@ impl EngineRuntime {
 
         let depth_texture = Texture::create_depth_texture(&device, &config, "Depth Texture");
 
-        render_state.window.init(window);
-        render_state.surface.init(surface);
-        render_state.queue.init(queue);
-        render_state.config.init(config);
-        render_state.size.init(size);
-        render_state.texture.init(texture);
-        render_state.depth_texture.init(depth_texture);
-        render_state.instance_scheme.init(instance_scheme);
-        render_state.instance_buffer.init(instance_buffer);
-        render_state.projection.init(projection);
-        render_state.camera_controller.init(camera_controller);
-        render_state.camera_uniform.init(camera_uniform);
-        render_state.camera_buffer.init(camera_buffer);
-        render_state.camera_buffer_actual.init(camera_buffer_actual);
-        render_state.camera_bind_group.init(camera_bind_group);
-        render_state.aspect_uniform.init(aspect_uniform);
-        render_state.aspect_buffer.init(aspect_buffer);
-        render_state.aspect_bind_group.init(aspect_bind_group);
-        render_state.clear_color.init(Color::BLACK);
-        render_state.render_pipeline.init(render_pipeline);
+        render_state.window.set(window);
+        render_state.surface.set(surface);
+        render_state.queue.set(queue);
+        render_state.config.set(config);
+        render_state.size.set(size);
+        render_state.texture.set(texture);
+        render_state.depth_texture.set(depth_texture);
+        render_state.instance_scheme.set(instance_scheme);
+        render_state.instance_buffer.set(instance_buffer);
+        render_state.projection.set(projection);
+        render_state.camera_controller.set(camera_controller);
+        render_state.camera_uniform.set(camera_uniform);
+        render_state.camera_buffer_actual.set(camera_buffer_actual);
+        render_state.camera_bind_group.set(camera_bind_group);
+        render_state.aspect_uniform.set(aspect_uniform);
+        render_state.aspect_buffer.set(aspect_buffer);
+        render_state.aspect_bind_group.set(aspect_bind_group);
+        render_state.clear_color.set(Color::BLACK);
+        render_state.render_pipeline.set(render_pipeline);
 
-        render_state.material.init(TextureMaterial::default());
+        render_state.material.set(TextureMaterial::default());
         render_state
             .material
-            .set_instance(render_state.instance_buffer.deref().clone());
+            .set_instance(render_state.instance_buffer.deref());
     }
 }

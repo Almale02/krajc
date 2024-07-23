@@ -12,10 +12,7 @@ use rapier3d::{
     pipeline::{PhysicsPipeline, QueryPipeline},
 };
 
-use crate::{
-    engine_runtime::schedule_manager::system_params::system_resource::EngineResource,
-    typed_addr::dupe,
-};
+use crate::engine_runtime::schedule_manager::system_params::system_resource::EngineResource;
 
 use super::Gravity;
 
@@ -53,10 +50,10 @@ impl Default for PhysicsWorld {
     }
 }
 impl EngineResource for PhysicsWorld {
-    fn get_mut(engine: &'static mut crate::engine_runtime::EngineRuntime) -> &'static mut Self {
+    fn get_mut<'w>(engine: &'w mut crate::engine_runtime::EngineRuntime<'w>) -> &'w mut Self {
         &mut engine.physics
     }
-    fn get(engine: &'static mut crate::engine_runtime::EngineRuntime) -> &'static Self {
+    fn get<'w>(engine: &'w mut crate::engine_runtime::EngineRuntime<'w>) -> &'w Self {
         &engine.physics
     }
 }
@@ -68,26 +65,26 @@ pub struct PhysicsMappings {
 }
 
 impl EngineResource for RigidBodySet {
-    fn get_mut(engine: &'static mut crate::engine_runtime::EngineRuntime) -> &'static mut Self {
+    fn get_mut<'w>(engine: &'w mut crate::engine_runtime::EngineRuntime<'w>) -> &'w mut Self {
         &mut engine.physics.rigid_body_set
     }
-    fn get(engine: &'static mut crate::engine_runtime::EngineRuntime) -> &'static Self {
-        &engine.physics.rigid_body_set
+    fn get<'w>(engine: &'w mut crate::engine_runtime::EngineRuntime<'w>) -> &'w Self {
+        &engine.physics.rigid_body_set
     }
 }
 impl EngineResource for ColliderSet {
-    fn get_mut(engine: &'static mut crate::engine_runtime::EngineRuntime) -> &'static mut Self {
+    fn get_mut<'w>(engine: &'w mut crate::engine_runtime::EngineRuntime<'w>) -> &'w mut Self {
         &mut engine.physics.collider_set
     }
-    fn get(engine: &'static mut crate::engine_runtime::EngineRuntime) -> &'static Self {
-        &engine.physics.collider_set
+    fn get<'w>(engine: &'w mut crate::engine_runtime::EngineRuntime<'w>) -> &'w Self {
+        &engine.physics.collider_set
     }
 }
 impl EngineResource for PhysicsMappings {
-    fn get_mut(engine: &'static mut crate::engine_runtime::EngineRuntime) -> &'static mut Self {
+    fn get_mut<'w>(engine: &'w mut crate::engine_runtime::EngineRuntime<'w>) -> &'w mut Self {
         &mut engine.physics.mappings
     }
-    fn get(engine: &'static mut crate::engine_runtime::EngineRuntime) -> &'static Self {
+    fn get<'w>(engine: &'w mut crate::engine_runtime::EngineRuntime<'w>) -> &'w Self {
         &engine.physics.mappings
     }
 }

@@ -3,7 +3,7 @@ use rapier3d::{math::Real, na::Vector3};
 
 use crate::{
     engine_runtime::schedule_manager::system_params::system_resource::EngineResource,
-    typed_addr::dupe,
+    rendering::buffer_manager::dupe,
 };
 
 pub mod components;

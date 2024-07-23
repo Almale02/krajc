@@ -21,13 +21,18 @@ impl<T> Deref for SchedData<T> {
         self.addr.get()
     }
 }
+impl<T> DerefMut for SchedData<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.addr.get()
+    }
+}
 
 /*impl<T> DerefMut for SchedData<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.addr.get()
     }
 }*/
-impl<T> From<SystemParam> for SchedData<T> {
+impl<'w, T> From<SystemParam<'w>> for SchedData<T> {
     fn from(value: SystemParam) -> Self {
         Self {
             addr: TypedAddr::<T>::new(value.schedule_data),

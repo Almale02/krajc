@@ -1,5 +1,7 @@
 #![allow(invalid_reference_casting)]
+#![allow(macro_expanded_macro_exports_accessed_by_absolute_paths)]
 #![feature(negative_impls)]
+#![feature(downcast_unchecked)]
 
 use crate::rendering::systems::general::update_rendering;
 use bevy_ecs::{change_detection::DetectChanges, component::Component, query::Changed, world::Ref};
@@ -16,7 +18,7 @@ use rapier3d::{
     math::Translation,
     na::{Isometry3, Transform3, Translation2, UnitQuaternion, Vector3 as Vector},
 };
-use typed_addr::{dupe, TypedAddr};
+use typed_addr::TypedAddr;
 
 use std::{
     collections::HashMap,
@@ -30,7 +32,7 @@ use cgmath::{Deg, Point3, Rad, Vector3};
 use engine_runtime::{
     schedule_manager::{
         runtime_schedule::{
-            DepGraph, RuntimeEndFrameSchedule, RuntimeEngineLoadScheduleData,
+            self, DepGraph, RuntimeEndFrameSchedule, RuntimeEngineLoadScheduleData,
             RuntimeUpdateSchedule, RuntimeUpdateScheduleData,
         },
         schedule::ScheduleRunnable,
@@ -47,7 +49,9 @@ use engine_runtime::{
 use ordered_float::OrderedFloat;
 use rendering::{
     aspect_ratio::AspectUniform,
-    buffer_manager::{managed_buffer::ManagedBufferGeneric, InstanceBufferType, UniformBufferType},
+    buffer_manager::{
+        dupe, managed_buffer::ManagedBufferGeneric, InstanceBufferType, UniformBufferType,
+    },
     camera::camera::Camera,
     managers::RenderManagerResource,
     material::update_texture_material,
@@ -125,7 +129,9 @@ fn fps_logger(
 ) {
     let render_state = render_state.get_static_mut();
 
-    if *prev_full_sec != update.since_start.as_secs_f64() as u64 {
+    let a = update.since_start;
+
+    if *prev_full_sec != update.deref().since_start.as_secs_f64() as u64 {
         dbg!(1. / update.dt.as_secs_f64());
         *prev_full_sec = update.since_start.as_secs_f64() as u64;
         dbg!(*prev_full_sec);
@@ -135,17 +141,17 @@ fn fps_logger(
 }
 
 pub async fn run() {
-    let runtime = EngineRuntime::init();
+    let runtime = EngineRuntime::new();
 
-    runtime.buffer_manager.engine = unsafe { ENGINE_RUNTIME.get() };
-    dupe(runtime)
+    runtime.buffer_manager.engine.set(&mut runtime);
+    runtime
         .buffer_manager
         .register_new_buffer::<UniformBufferType>();
-    dupe(runtime)
+    runtime
         .buffer_manager
         .register_new_buffer::<InstanceBufferType>();
 
-    let render_states = dupe(runtime).get_resource_mut::<RenderManagerResource>();
+    let render_states = dupe(&runtime).get_resource_mut::<RenderManagerResource>();
 
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new()
@@ -155,34 +161,43 @@ pub async fn run() {
 
     window.set_cursor_visible(false);
 
-    EngineRuntime::init_rendering(window).await;
+    //EngineRuntime::init_rendering(window, &mut runtime).await;
+    runtime.init_rendering(window).await;
 
-    startup!(runtime);
-    fps_logger!(runtime);
-    update_rendering!(runtime);
+    /*startup!(&runtime);
+    fps_logger!(&runtime);
+    update_rendering!(&runtime);
 
-    update_texture_material!(runtime);
+    update_texture_material!(&runtime);*/
 
-    physics_systems(runtime);
+    physics_systems(&mut runtime);
     //update_texture_material!(runtime);
     /*step_physics!(runtime);
     sync_physics_transform!(runtime);
     sync_fixed_bodies_to_rapier!(runtime);
     handle_rigidbody_insert!(runtime);*/
 
-    move_stuff_up!(runtime);
+    //move_stuff_up!(&runtime);
 
-    dupe(runtime)
+    startup!(&mut runtime);
+    fps_logger!(&mut runtime);
+    update_rendering!(&mut runtime);
+
+    update_rendering!(&mut runtime);
+
+    move_stuff_up!(&mut runtime);
+
+    dupe(&runtime)
         .get_resource_mut::<RuntimeUpdateSchedule>()
-        .calc_dep_graph(runtime);
+        .calc_dep_graph(&mut runtime);
 
-    dupe(runtime)
+    dupe(&runtime)
         .get_resource_mut::<RuntimeEngineLoadSchedule>()
-        .calc_dep_graph(runtime);
+        .calc_dep_graph(&mut runtime);
 
-    dupe(runtime)
+    dupe(&runtime)
         .get_resource_mut::<RuntimeEndFrameSchedule>()
-        .calc_dep_graph(runtime);
+        .calc_dep_graph(&mut runtime);
 
     env_logger::init();
 
@@ -190,10 +205,10 @@ pub async fn run() {
 
     let start = Instant::now();
     let mut prev_full_sec = 0_u64;
-    let window_ref = render_states.window.get_ref();
+    let window_ref = render_states.window;
 
-    let load = dupe(runtime).get_resource_mut::<RuntimeEngineLoadSchedule>();
-    load.execute(dupe(runtime));
+    let load = dupe(&runtime).get_resource_mut::<RuntimeEngineLoadSchedule>();
+    load.execute(dupe(&runtime));
 
     //render_states.material.register_systems(runtime);
     event_loop.run(move |event, _window_target, control_flow| match event {
@@ -201,7 +216,7 @@ pub async fn run() {
              event: DeviceEvent::MouseMotion{ delta, },
             .. // We're not using device_id currently
         } => {
-            render_states.camera_controller.get_ref_mut().process_mouse(delta.0, delta.1);
+            render_states.camera_controller.process_mouse(delta.0, delta.1);
         }
 
         Event::MainEventsCleared => {
@@ -224,7 +239,7 @@ pub async fn run() {
             match runtime.render() {
                 Ok(_) => {}
                 Err(SurfaceError::Lost) => {
-                    runtime.resize(*render_states.size.get_ref())
+                    runtime.resize(*render_states.size)
                 },
                 Err(SurfaceError::Outdated) => control_flow.set_exit(),
                 Err(e) => eprintln!("{:?}", e),
@@ -339,11 +354,11 @@ create_system!(new_system(a: i32) {
 macro_rules! generate_state_struct{
     ($struct_name:ident { $($field:ident: $type:ty = $value:expr),* $(,)? }) => {
         #[derive(krajc::EngineResource)]
-        pub struct $struct_name {
+        pub struct $struct_name<'a> {
             $(pub $field: GenericStateRefTemplate<$type>),*
         }
 
-        impl $struct_name {
+        impl<'a> $struct_name {
             pub fn new() -> Self {
                 Self {
                     $($field: GenericStateRefTemplate::<$type>::new($value)),*
@@ -388,13 +403,13 @@ macro_rules! generate_state_struct{
 macro_rules! generate_state_struct_non_resource {
     ($struct_name:ident { $($field:ident: $type:ty = $value:expr),* $(,)? }) => {
         pub struct $struct_name {
-            $(pub $field: GenericStateRefTemplate<$type>),*
+            $(pub $field: $type),*
         }
 
         impl $struct_name {
             pub fn new() -> Self {
                 Self {
-                    $($field: GenericStateRefTemplate::<$type>::new($value)),*
+                    $($field: $value),*
                 }
             }
             pub fn init() -> &'static mut Self {
@@ -409,35 +424,6 @@ macro_rules! generate_state_struct_non_resource {
         impl Default for $struct_name {
             fn default() -> Self {
                 Self::new()
-            }
-        }
-    };
-    ($struct_name:ident { $($field:ident: $type:ty = $name:expr => $init_value: expr),* $(,)? }) => {
-        pub struct $struct_name {
-            $(pub $field: GenericStateRefTemplate<$type>),*
-        }
-        impl $struct_name {
-            pub fn new() -> Self {
-                Self {
-                    $($field: GenericStateRefTemplate::<$type>::new($name)),*
-                }
-            }
-            pub fn create_new() -> Self {
-                Self {
-                    $($field: GenericStateRefTemplate::<$type>::new_and_init($name, $init_value)),*
-                }
-            }
-            pub fn init() -> &'static mut Self {
-                let mgr = Box::new(Self::default());
-                let leaked = Box::leak(mgr);
-                let _raw = leaked as *mut _;
-
-                leaked
-            }
-        }
-        impl Default for $struct_name {
-            fn default() -> Self {
-                Self::create_new()
             }
         }
     };
@@ -471,11 +457,33 @@ impl<T> Lateinit<T> {
     fn set(&mut self, value: T) {
         self.value = LateinitEnum::<T>::Some(value);
     }
+    fn get(&self) -> &T {
+        match &self.value {
+            LateinitEnum::Some(x) => x,
+            LateinitEnum::Uninited => panic!(""),
+        }
+    }
+    fn get_mut(&mut self) -> &mut T {
+        match &mut self.value {
+            LateinitEnum::Some(x) => x,
+            LateinitEnum::Uninited => panic!(""),
+        }
+    }
 }
 impl<T> Deref for Lateinit<T> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
         match &self.value {
+            LateinitEnum::Some(value) => value,
+            LateinitEnum::Uninited => {
+                panic!("dereferenced an uninited value")
+            }
+        }
+    }
+}
+impl<T> DerefMut for Lateinit<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        match &mut self.value {
             LateinitEnum::Some(value) => value,
             LateinitEnum::Uninited => {
                 panic!("dereferenced an uninited value")

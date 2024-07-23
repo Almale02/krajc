@@ -1,16 +1,18 @@
+use bevy_ecs::component::Component;
+use krajc::EngineResource;
 use wgpu::*;
+use winit::{dpi::PhysicalSize, window::Window};
 
 use crate::{
     engine_runtime::{
-        engine_state_manager::generic_state_manager::GenericStateRefTemplate,
         schedule_manager::system_params::system_resource::EngineResource, EngineRuntime,
     },
-    generate_state_struct, InstanceBufferType, UniformBufferType,
+    generate_state_struct, InstanceBufferType, Lateinit, UniformBufferType,
 };
 
 use super::{
     aspect_ratio::AspectUniform,
-    buffer_manager::managed_buffer::ManagedBufferInstanceHandle,
+    buffer_manager::{dupe, managed_buffer::ManagedBufferInstanceHandle},
     camera::camera::{CameraController, CameraUniform, Projection},
     material::TextureMaterial,
     render_entity::render_entity::TextureMaterialInstance,
@@ -26,41 +28,91 @@ pub mod window;
 
 type S = &'static str;
 
-generate_state_struct!(RenderManagerResource {
-     adapter: Adapter = "adapter",
-     surface: Surface = "surface",
-     device: Device = "device",
-     queue: Queue = "queue",
-     config: SurfaceConfiguration = "config",
-     size: winit::dpi::PhysicalSize<u32> = "size",
-     render_pipeline: RenderPipeline = "render_pipeline",
+#[derive(Default)]
+pub struct RenderManagerResource<'w> {
+    pub adapter: Lateinit<Adapter>,
+    pub surface: Lateinit<Surface>,
+    pub device: Lateinit<Device>,
+    pub queue: Lateinit<Queue>,
+    pub config: Lateinit<SurfaceConfiguration>,
+    pub size: Lateinit<PhysicalSize<u32>>,
+    pub render_pipeline: Lateinit<RenderPipeline>,
 
-     texture: Texture = "texture",
-     depth_texture: Texture = "depth_texture",
+    pub texture: Lateinit<Texture>,
+    pub depth_texture: Lateinit<Texture>,
 
-     window: winit::window::Window = "window",
+    pub window: Lateinit<Window>,
 
-     instance_scheme: Vec<TextureMaterialInstance> = "instance_scheme",
-     instance_buffer: ManagedBufferInstanceHandle<InstanceBufferType>= "instance_buffer",
+    pub instance_scheme: Lateinit<Vec<TextureMaterialInstance>>,
+    pub instance_buffer: Lateinit<ManagedBufferInstanceHandle<'w, InstanceBufferType>>,
 
-     projection: Projection = "projection",
-     camera_controller: CameraController = "camera_controller",
-     camera_uniform: CameraUniform = "camera_uniform",
-     camera_buffer: ManagedBufferInstanceHandle<UniformBufferType> = "camera_buffer",
-     camera_buffer_actual: Buffer = "camera_buffer_actual",
-     camera_bind_group: BindGroup = "camera_bind_group",
+    pub projection: Lateinit<Projection>,
+    pub camera_controller: Lateinit<CameraController>,
+    pub camera_uniform: Lateinit<CameraUniform>,
+    pub camera_buffer: Lateinit<ManagedBufferInstanceHandle<'w, UniformBufferType>>,
+    pub camera_buffer_actual: Lateinit<Buffer>,
+    pub camera_bind_group: Lateinit<BindGroup>,
 
-     aspect_uniform: AspectUniform = "aspect_uniform",
-     aspect_buffer: Buffer = "aspect_buffer",
-     aspect_bind_group: BindGroup = "aspect_bind_group",
+    pub aspect_uniform: Lateinit<AspectUniform>,
+    pub aspect_buffer: Lateinit<Buffer>,
+    pub aspect_bind_group: Lateinit<BindGroup>,
 
-     clear_color: Color = "clear_color",
+    pub clear_color: Lateinit<Color>,
 
-     material: TextureMaterial = "texture_material",
-
-});
-impl Clone for RenderManagerResource {
+    pub material: Lateinit<TextureMaterial<'w>>,
+}
+impl<'w> Clone for RenderManagerResource<'w> {
     fn clone(&self) -> Self {
         Self::default()
+    }
+}
+
+impl<'a: 'static> EngineResource for RenderManagerResource<'a> {
+    fn get_mut<'w>(engine: &'w mut EngineRuntime<'w>) -> &'w mut Self {
+        let op = dupe(engine)
+            .static_resource_map
+            .get_mut(&std::any::TypeId::of::<Self>());
+        match op {
+            Some(val) => unsafe { val.downcast_mut_unchecked() },
+            None => {
+                dupe(engine).static_resource_map.insert(
+                    std::any::TypeId::of::<Self>(),
+                    Box::new(RenderManagerResource::default()),
+                );
+
+                unsafe {
+                    dupe(engine)
+                        .static_resource_map
+                        .get_mut(&std::any::TypeId::of::<Self>())
+                        .unwrap()
+                        .downcast_mut_unchecked()
+                }
+            }
+        }
+    }
+    fn get<'w>(engine: &'w mut crate::engine_runtime::EngineRuntime<'w>) -> &'w Self {
+        let op = crate::rendering::buffer_manager::dupe(engine)
+            .static_resource_map
+            .get_mut(&std::any::TypeId::of::<Self>());
+        match op {
+            Some(val) => unsafe { val.downcast_mut_unchecked() },
+            None => {
+                //let addr = crate::TypedAddr::new_with_ref(new).addr;
+                crate::rendering::buffer_manager::dupe(engine)
+                    .static_resource_map
+                    .insert(
+                        std::any::TypeId::of::<Self>(),
+                        Box::new(RenderManagerResource::default()),
+                    );
+
+                unsafe {
+                    crate::rendering::buffer_manager::dupe(engine)
+                        .static_resource_map
+                        .get_mut(&std::any::TypeId::of::<Self>())
+                        .unwrap()
+                        .downcast_mut_unchecked()
+                }
+            }
+        }
     }
 }

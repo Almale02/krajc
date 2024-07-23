@@ -4,9 +4,13 @@ use crate::{engine_runtime::EngineRuntime, ENGINE_RUNTIME};
 
 use super::RenderManagerResource;
 
-impl EngineRuntime {
+impl EngineRuntime<'_> {
     pub fn window_events(&mut self, event: &WindowEvent) -> bool {
-        let render_state = unsafe { ENGINE_RUNTIME.get().get_resource_mut::<RenderManagerResource>() };
+        let render_state = unsafe {
+            ENGINE_RUNTIME
+                .get()
+                .get_resource_mut::<RenderManagerResource>()
+        };
         match event {
             WindowEvent::KeyboardInput {
                 input:

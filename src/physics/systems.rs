@@ -19,16 +19,21 @@ use syn::token::Typeof;
 use crate::{
     engine_runtime::{
         schedule_manager::{
-            runtime_schedule::{RuntimeEndFrameSchedule, RuntimeUpdateSchedule},
+            runtime_schedule::{
+                RuntimeEndFrameSchedule, RuntimeEngineLoadSchedule, RuntimeUpdateSchedule,
+            },
             system_params::{
-                system_query::{EcsWorld, Runtime, SystemQuery},
+                system_query::{EcsWorld, SystemQuery},
                 system_resource::{EngineResource, Res},
             },
         },
         EngineRuntime,
     },
-    rendering::systems::general::Transform,
-    typed_addr::{dupe, TypedAddr},
+    fps_logger, move_stuff_up,
+    rendering::{buffer_manager::dupe, systems::general::Transform},
+    startup,
+    typed_addr::TypedAddr,
+    update_rendering,
 };
 
 use super::{
@@ -148,11 +153,25 @@ pub fn syn_target_transform_kinematic_body(
 ) {
 }
 
-pub fn physics_systems(runtime: &mut EngineRuntime) {
+pub fn physics_systems<'w>(runtime: &'w mut EngineRuntime<'w>) {
     sync_physics_transform!(runtime);
     sync_fixed_bodies_to_rapier!(runtime);
     handle_rigidbody_insert!(runtime);
     step_physics!(runtime);
+
+    startup!(runtime);
+    fps_logger!(runtime);
+    update_rendering!(runtime);
+
+    update_rendering!(runtime);
+
+    //update_texture_material!(runtime);
+    /*step_physics!(runtime);
+    sync_physics_transform!(runtime);
+    sync_fixed_bodies_to_rapier!(runtime);
+    handle_rigidbody_insert!(runtime);*/
+
+    move_stuff_up!(runtime);
 }
 
 /*impl EngineResource for TestRes {

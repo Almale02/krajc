@@ -6,8 +6,13 @@ use std::{
 use bytemuck::Contiguous;
 
 use crate::{
-    engine_runtime::{schedule_manager::runtime_schedule::IterExt, EngineRuntime},
-    typed_addr::{dupe, TypedAddr},
+    engine_runtime::{
+        engine_data::data_refs::{EngineDataMut, EngineDataRef},
+        schedule_manager::runtime_schedule::IterExt,
+        EngineRuntime,
+    },
+    rendering::buffer_manager::dupe,
+    typed_addr::TypedAddr,
     ThreadRawPointer, ENGINE_RUNTIME,
 };
 
@@ -43,10 +48,10 @@ impl<STATE> Schedule<STATE> {
     }
 }
 pub trait ScheduleRunnable {
-    fn run(&mut self, runtime: &'static mut EngineRuntime, schedule_state: usize);
-    fn predicate(&self, runtime: &'static EngineRuntime, schedule_state: usize) -> bool;
+    fn run<'w>(&mut self, runtime: &'w mut EngineRuntime<'w>, schedule_state: usize);
+    fn predicate<'w>(&self, runtime: &'w EngineRuntime, schedule_state: usize) -> bool;
     fn name(&self) -> &'static str;
-    fn setup_filter(&mut self, runtime: &'static mut EngineRuntime, schedule_state: usize);
+    fn setup_filter<'w>(&mut self, runtime: &'w mut EngineRuntime<'w>, schedule_state: usize);
     fn get_params_filters(&self) -> &Vec<Box<dyn SystemParalellFilter>>;
 }
 
@@ -64,20 +69,23 @@ pub fn single_thread_scheduler(
 }
 #[macro_export]
 macro_rules! implement_schedule {
-    ($type: ty) => {
-        use $crate::engine_runtime::schedule_manager::schedule::*;
-        impl $type {
+    ($type: ident) => {
+        impl<'a> $type<'a> {
             pub fn new(name: &str, schedule_state_addr: usize) -> Self {
                 Self {
                     schedule_name: name.to_string(),
                     actions: Vec::default(),
                     schedule_state: TypedAddr::new(schedule_state_addr),
-                    dep_graph: DepGraph::default(),
+                    dep_graph: Lateinit::default(),
                 }
             }
-            pub fn calc_dep_graph(&'static mut self, engine: &mut EngineRuntime) {
+            pub fn calc_dep_graph<'w: 'a>(&'w mut self, engine: &'w mut EngineRuntime<'w>)
+            where
+                'a: 'w,
+            {
                 let start = std::time::Instant::now();
-                self.dep_graph = calc_dep_graph(&mut self.actions, dupe(engine));
+                self.dep_graph
+                    .set(calc_dep_graph(&mut self.actions, engine));
                 dbg!(start.elapsed());
             }
             pub fn execute(&'static mut self, engine: &'static mut EngineRuntime) {
@@ -93,8 +101,8 @@ macro_rules! implement_schedule {
 
                 let mut thread_join = vec![];
 
-                let (dep_graph, ids) = &mut self.dep_graph; //calc_dep_graph(&mut self.actions, dupe(engine));
-                                                            //dbg!(dep_graph.clone());
+                let (dep_graph, ids) = &mut self.dep_graph.get(); //calc_dep_graph(&mut self.actions, dupe(engine));
+                                                                  //dbg!(dep_graph.clone());
 
                 let mut to_execute = HashSet::new();
                 let mut executed = HashSet::new();
@@ -194,17 +202,15 @@ macro_rules! implement_schedule {
                 self.actions.push(action);
             }
         }
-        unsafe impl Send for $type {}
-        unsafe impl Sync for $type {}
     };
 }
 
-pub fn calc_dep_graph(
-    systems: &'static mut [Box<dyn ScheduleRunnable>],
-    engine: &'static mut EngineRuntime,
+pub fn calc_dep_graph<'w>(
+    systems: &'w mut Vec<Box<dyn ScheduleRunnable>>,
+    engine: &'w mut EngineRuntime<'w>,
 ) -> (
-    Vec<(usize, std::collections::HashSet<usize>)>,
-    HashMap<usize, &'static Box<dyn ScheduleRunnable>>,
+    EngineDataRef<'w, Vec<(usize, std::collections::HashSet<usize>)>>,
+    HashMap<usize, &'w Box<dyn ScheduleRunnable>>,
 ) {
     /*let mut paralell_systems = ScheduleParalellizationData::default();
     for (i, action) in &mut dupe(systems).iter().enumerate() {
@@ -215,7 +221,7 @@ pub fn calc_dep_graph(
 
     let mut groups: Vec<HashSet<usize>> = Vec::default();
 
-    for (i, system) in systems.iter_mut_totallysafe().enumerate() {
+    for (i, system) in dupe(systems).iter_mut().enumerate() {
         system.setup_filter(dupe(engine), 0);
         ids.insert(i, system);
     }
@@ -283,7 +289,9 @@ pub fn calc_dep_graph(
             }
         }
     }
-    (dep_graph, ids)
+
+    let dep_graph_data = dupe(engine).engine_data.create_new(dep_graph);
+    (dep_graph_data, ids)
 }
 fn check_if_compatible(
     first: &Vec<Box<dyn SystemParalellFilter>>,

@@ -31,7 +31,7 @@ where
     pub addr: TypedAddr<T>,
 }
 impl<T: EngineResource> Res<T> {
-    pub fn find_addr(&mut self, engine: &'static mut EngineRuntime) {
+    pub fn find_addr<'w>(&mut self, engine: &'w mut EngineRuntime<'w>) {
         let address = engine.get_resource_mut::<T>();
         self.addr = TypedAddr::new_with_ref(address);
     }
@@ -61,6 +61,6 @@ impl<T: EngineResource> Res<T> {
     }
 }
 pub trait EngineResource {
-    fn get_mut(engine: &'static mut EngineRuntime) -> &'static mut Self;
-    fn get(engine: &'static mut EngineRuntime) -> &'static Self;
+    fn get_mut<'w>(engine: &'w mut EngineRuntime<'w>) -> &'w mut Self;
+    fn get<'w>(engine: &'w mut EngineRuntime<'w>) -> &'w Self;
 }

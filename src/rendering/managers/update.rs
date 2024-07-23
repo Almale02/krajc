@@ -10,11 +10,12 @@ use crate::{
         },
         EngineRuntime,
     },
-    typed_addr::{dupe, TypedAddr},
+    rendering::buffer_manager::dupe,
+    typed_addr::TypedAddr,
     ENGINE_RUNTIME,
 };
 
-impl EngineRuntime {
+impl<'w> EngineRuntime<'w> {
     pub fn update(&mut self, dt: Duration, start: Instant) {
         let _dt_f64 = dt.as_secs_f64();
         let engine = unsafe { ENGINE_RUNTIME.get() };
@@ -23,8 +24,8 @@ impl EngineRuntime {
                 dupe(engine).get_resource_mut();
             let update_state = runtime_schedule_state.schedule_state.get();
 
-            *update_state.dt = dt;
-            *update_state.since_start = Instant::now() - start;
+            update_state.dt = dt;
+            update_state.since_start = Instant::now() - start;
 
             runtime_schedule_state.execute(dupe(engine));
         }

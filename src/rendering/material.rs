@@ -21,12 +21,11 @@ use crate::{
         },
         EngineRuntime,
     },
-    typed_addr::dupe,
     InstanceBufferType, Lateinit, Marker, Vec3,
 };
 
 use super::{
-    buffer_manager::managed_buffer::ManagedBufferInstanceHandle,
+    buffer_manager::{dupe, managed_buffer::ManagedBufferInstanceHandle},
     managers::RenderManagerResource,
     mesh::mesh::{Mesh, TextureVertex},
     render_entity::{
@@ -37,34 +36,38 @@ use super::{
     texture::texture::Texture,
 };
 
-pub trait MaterialGeneric {
-    fn render_pipeline(&self, engine: &mut EngineRuntime) -> RenderPipeline;
-    fn vertex_buffer(&self, engine: &mut EngineRuntime) -> &'static Buffer;
-    fn index_buffer(&self, engine: &mut EngineRuntime) -> &'static Buffer;
-    fn instance_buffer(&self, engine: &mut EngineRuntime) -> &'static Buffer;
-    fn set_bind_groups(&self, pipeline: &mut RenderPass<'_>, engine: &mut EngineRuntime);
+pub trait MaterialGeneric<'a> {
+    fn render_pipeline<'w: 'static>(&'w self, engine: &'w mut EngineRuntime<'w>) -> RenderPipeline;
+    fn vertex_buffer<'w>(&'w self, engine: &'w mut EngineRuntime<'w>) -> &'w Buffer;
+    fn index_buffer<'w>(&'w self, engine: &'w mut EngineRuntime<'w>) -> &'w Buffer;
+    fn instance_buffer<'w: 'a>(&'w self, engine: &'w mut EngineRuntime<'w>) -> &'w Buffer;
+    fn set_bind_groups<'w>(
+        &'w self,
+        pipeline: &mut RenderPass<'w>,
+        engine: &'w mut EngineRuntime<'w>,
+    );
     fn get_index_range(&self) -> Range<u32>;
     fn get_instance_range(&self) -> Range<u32>;
-    fn register_systems(&self, engine: &mut EngineRuntime);
+    fn register_systems<'w>(&self, engine: &'w mut EngineRuntime<'w>);
 }
 
 #[derive(Default)]
-pub struct TextureMaterial {
+pub struct TextureMaterial<'w> {
     mesh: Lateinit<Mesh>,
-    instance_buffer: Lateinit<ManagedBufferInstanceHandle<InstanceBufferType>>,
+    instance_buffer: Lateinit<ManagedBufferInstanceHandle<'w, InstanceBufferType>>,
     pub instance_count: u32,
 }
-impl TextureMaterial {
+impl<'w> TextureMaterial<'w> {
     pub fn set_mesh(&mut self, mesh: Mesh) {
         self.mesh.set(mesh);
     }
     pub fn set_instance(
         &mut self,
-        instance_buffer: ManagedBufferInstanceHandle<InstanceBufferType>,
+        instance_buffer: &'w ManagedBufferInstanceHandle<'w, InstanceBufferType>,
     ) {
-        self.instance_buffer.set(instance_buffer);
+        self.instance_buffer.set(instance_buffer.clone());
     }
-    pub fn set_instance_value(&'static mut self, data: Vec<TextureMaterialInstance>) {
+    pub fn set_instance_value(&'w mut self, data: Vec<TextureMaterialInstance>) {
         self.instance_count = data.len() as u32;
 
         //let start = Instant::now();
@@ -131,11 +134,11 @@ pub fn update_texture_material(
     };
 }
 
-impl MaterialGeneric for TextureMaterial {
+impl<'a> MaterialGeneric<'a> for TextureMaterial<'a> {
     fn get_instance_range(&self) -> Range<u32> {
         0..self.instance_count
     }
-    fn render_pipeline(&self, engine: &mut EngineRuntime) -> RenderPipeline {
+    fn render_pipeline<'w: 'static>(&'w self, engine: &'w mut EngineRuntime<'w>) -> RenderPipeline {
         let render = dupe(engine).get_resource_mut::<RenderManagerResource>();
 
         std::fs::read_to_string("resources/shaders/shader_texture.wgsl").expect("failed");
@@ -240,16 +243,23 @@ impl MaterialGeneric for TextureMaterial {
             });
         render_pipeline
     }
-    fn index_buffer(&self, _engine: &mut EngineRuntime) -> &'static Buffer {
-        &dupe(self).mesh.index_buffer
-    }
-    fn vertex_buffer(&self, _engine: &mut EngineRuntime) -> &'static Buffer {
+    fn vertex_buffer<'w>(&'w self, _engine: &'w mut EngineRuntime<'w>) -> &'w Buffer {
         &dupe(self).mesh.vertex_buffer
     }
-    fn instance_buffer(&self, _engine: &mut EngineRuntime) -> &'static Buffer {
-        dupe(self).instance_buffer.get_buffer()
+    fn index_buffer<'w>(&'w self, _engine: &'w mut EngineRuntime<'w>) -> &'w Buffer {
+        &dupe(self).mesh.index_buffer
     }
-    fn set_bind_groups(&self, pipeline: &mut RenderPass<'_>, engine: &mut EngineRuntime) {
+    fn instance_buffer<'w>(&'w self, _engine: &mut EngineRuntime<'w>) -> &'w Buffer
+    where
+        'w: 'a,
+    {
+        &dupe(self).instance_buffer.get_buffer()
+    }
+    fn set_bind_groups<'w>(
+        &'w self,
+        pipeline: &mut RenderPass<'w>,
+        engine: &'w mut EngineRuntime<'w>,
+    ) {
         let state = dupe(engine).get_resource_mut::<RenderManagerResource>();
 
         pipeline.set_bind_group(0, state.texture.texture_bind_group.as_ref().expect("the field texture_bind_group needs to be set on textures before applying them for render,
@@ -261,6 +271,6 @@ you could call Texture::get_texture_bind_group on the created texture, and then 
         0..self.mesh.index_list.len() as u32
     }
     fn register_systems(&self, engine: &mut EngineRuntime) {
-        update_texture_material!(engine);
+        //update_texture_material!(engine);
     }
 }

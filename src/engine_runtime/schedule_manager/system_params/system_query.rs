@@ -14,7 +14,7 @@ use bevy_ecs::{
     world::World,
 };
 
-use crate::{engine_runtime::EngineRuntime, typed_addr::dupe};
+use crate::engine_runtime::EngineRuntime;
 
 use super::system_param::{IntoSystemParalellFilter, SystemParalellFilter, SystemParam};
 
@@ -62,7 +62,7 @@ where
 impl<Data: QueryData, Filter: QueryFilter> SystemQuery<Data, Filter> {
     #[inline]
     pub fn iter<'w>(&'w mut self) -> QueryIter<'w, 'w, Data::ReadOnly, Filter> {
-        self.provider.iter(dupe(self.world))
+        self.provider.iter(self.world)
     }
 
     /// Returns an [`Iterator`] over the query results for the given [`World`].
@@ -168,12 +168,13 @@ impl<Data: QueryData, Filter: QueryFilter> SystemQuery<Data, Filter> {
     }
 }
 
-impl<Data, Filter> From<SystemParam> for SystemQuery<Data, Filter>
+impl<'w, Data, Filter> From<SystemParam<'w>> for SystemQuery<Data, Filter>
 where
     Data: QueryData,
     Filter: QueryFilter,
+    'w: 'static,
 {
-    fn from(value: SystemParam) -> Self {
+    fn from(value: SystemParam<'w>) -> Self {
         let world = &mut value.engine.ecs.world;
         let provider = world.query_filtered::<Data, Filter>();
 
@@ -203,7 +204,7 @@ impl SystemParalellFilter for EcsWorldFilterable {
     }
 }
 
-pub struct Runtime {
+/*pub struct Runtime {
     runtime: &'static mut EngineRuntime,
 }
 impl Deref for Runtime {
@@ -236,24 +237,25 @@ impl SystemParalellFilter for RuntimeFilterable {
     fn filter_against_param(&self, _param: &Box<dyn SystemParalellFilter>) -> bool {
         false
     }
-} //
-pub struct EcsWorld {
-    world: &'static mut World,
+}*/
+//
+pub struct EcsWorld<'w> {
+    world: &'w mut World,
 }
-impl IntoSystemParalellFilter for EcsWorld {
+impl<'w> IntoSystemParalellFilter for EcsWorld<'w> {
     fn get_filterable(&self) -> Box<dyn SystemParalellFilter> {
         Box::new(EcsWorldFilterable {})
     }
 }
-impl From<SystemParam> for EcsWorld {
-    fn from(value: SystemParam) -> Self {
+impl<'w> From<SystemParam<'w>> for EcsWorld<'w> {
+    fn from(value: SystemParam<'w>) -> Self {
         Self {
             world: &mut value.engine.ecs.world,
         }
     }
 }
 
-impl Deref for EcsWorld {
+impl<'w> Deref for EcsWorld<'w> {
     type Target = World;
 
     fn deref(&self) -> &Self::Target {
@@ -261,7 +263,7 @@ impl Deref for EcsWorld {
     }
 }
 
-impl DerefMut for EcsWorld {
+impl<'w> DerefMut for EcsWorld<'w> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.world
     }
