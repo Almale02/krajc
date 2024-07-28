@@ -286,3 +286,17 @@ fn impl_res(ast: &syn::DeriveInput) -> TokenStream {
     };
     gen.into()
 }
+
+use syn::Ident;
+
+#[proc_macro]
+pub fn not_prod(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as Ident);
+    let expanded = quote! {
+        #[cfg(not(feature = "prod"))]
+        {
+            #input
+        }
+    };
+    TokenStream::from(expanded)
+}

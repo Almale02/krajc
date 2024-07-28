@@ -1,37 +1,50 @@
 #![allow(invalid_reference_casting)]
-#![feature(negative_impls)]
+#![allow(clippy::module_inception)]
+#![allow(macro_expanded_macro_exports_accessed_by_absolute_paths)]
+//#![feature(negative_impls)]
+//#![feature(stmt_expr_attributes)]
+#![allow(clippy::type_complexity)]
 
 use crate::rendering::systems::general::update_rendering;
-use bevy_ecs::{change_detection::DetectChanges, component::Component, query::Changed, world::Ref};
-use krajc::{system_fn, Comp};
+use bevy_ecs::{component::Component, query::With};
 
 //pub type QueryFilter<A, B = Passthrough> = EntityFilterTuple<A, B>;
 
-use physics::systems::{
-    handle_rigidbody_insert, physics_systems, step_physics, sync_fixed_bodies_to_rapier,
-    sync_physics_transform,
+use krajc::system_fn;
+use physics::{
+    components::{
+        collider::Collider,
+        general::{LinearVelocity, PhysicsSyncDirectBodyModifications, RigidBody, RigidBodyHandle},
+    },
+    systems::rigid_body::physics_systems,
+    Gravity,
 };
 use pollster::FutureExt;
 use rapier3d::{
+    dynamics::{RigidBodySet, RigidBodyType},
+    geometry::ColliderShape,
     math::Translation,
-    na::{Isometry3, Transform3, Translation2, UnitQuaternion, Vector3 as Vector},
+    na::{Isometry3, UnitQuaternion, Vector3 as Vector},
 };
+
 use typed_addr::{dupe, TypedAddr};
 
 use std::{
     collections::HashMap,
     hash::Hash,
     ops::{Deref, DerefMut},
+    rc::Rc,
     time::Instant,
 };
 
 use cgmath::{Deg, Point3, Rad, Vector3};
 
+use rapier3d::na::Vector3 as NaVec3;
+
 use engine_runtime::{
     schedule_manager::{
         runtime_schedule::{
-            DepGraph, RuntimeEndFrameSchedule, RuntimeEngineLoadScheduleData,
-            RuntimeUpdateSchedule, RuntimeUpdateScheduleData,
+            RuntimeEndFrameSchedule, RuntimeUpdateSchedule, RuntimeUpdateScheduleData,
         },
         schedule::ScheduleRunnable,
         system_params::{
@@ -48,21 +61,20 @@ use ordered_float::OrderedFloat;
 use rendering::{
     aspect_ratio::AspectUniform,
     buffer_manager::{managed_buffer::ManagedBufferGeneric, InstanceBufferType, UniformBufferType},
+    builtin_materials::{
+        light_material::material::update_light_material,
+        texture_material::material::update_texture_material,
+    },
     camera::camera::Camera,
     managers::RenderManagerResource,
-    material::update_texture_material,
     mesh::mesh::Mesh,
-    render_entity::{instancing::TestInstanceSchemes, render_entity::TextureMaterialInstance},
-    systems::general::{move_stuff_up, Transform},
+    systems::general::{move_light, move_stuff_up, Transform},
 };
 
-use wgpu::{Buffer, BufferUsages, RenderBundle, SurfaceError};
+use wgpu::{BufferUsages, SurfaceError};
 use winit::{dpi::PhysicalSize, event::*, event_loop::EventLoop, window::WindowBuilder};
 
-use crate::{
-    engine_runtime::schedule_manager::runtime_schedule::RuntimeEngineLoadSchedule,
-    rendering::material::MaterialGeneric,
-};
+use crate::engine_runtime::schedule_manager::runtime_schedule::RuntimeEngineLoadSchedule;
 
 pub static mut ENGINE_RUNTIME: TypedAddr<EngineRuntime> = TypedAddr::<EngineRuntime>::default();
 
@@ -73,6 +85,10 @@ pub mod engine_runtime;
 pub mod rendering;
 pub mod typed_addr;
 
+/*#[cfg(not(feature="prod"))]
+#[global_allocator]
+static ALLOC: GlobalAllocatorSampled = GlobalAllocatorSampled::new(100);*/
+
 fn main() {
     run().block_on();
 }
@@ -80,25 +96,47 @@ fn main() {
 #[derive(Component)]
 pub struct Marker;
 
+#[derive(Component)]
+pub struct LightMaterialMarker;
+
 #[system_fn(RuntimeEngineLoadSchedule)]
-fn startup(mut world: EcsWorld, mut render: Res<RenderManagerResource>) {
+fn startup(mut world: EcsWorld, mut render: Res<RenderManagerResource>, gravity: Res<Gravity>) {
     dbg!("ran startup");
-    let mut entities: Vec<(Transform, Marker)> = vec![];
+    //let mut entities = vec![];
 
-    let width = 99;
-    let height = 99;
+    //gravity.0 = NaVec3::new(0., -2., 0.);
 
-    for y in 0..height {
-        for x in 0..width {
-            entities.push((
-                Transform::new_vec(Vector::new(x as f32, 0., y as f32)),
-                Marker,
+    let stack = 1;
+    let width = 32;
+    let height = 32;
+
+    for stack in 0..stack {
+        for y in 0..height {
+            for x in 0..width {
+                world.spawn((
+                    Transform::new_vec(Vector::new(x as f32, stack as f32 * 30., y as f32)),
+                    LightMaterialMarker,
+                    RigidBody::new(RigidBodyType::Dynamic)
+                        .linvel(NaVec3::new(0., 2., 0.))
+                        .can_sleep(false)
+                        .build(),
+                    Collider::new(ColliderShape::ball(0.5)).build(),
+                ));
+            }
+        }
+    }
+    for y in 0..16 {
+        for x in 0..16 {
+            world.spawn((
+                Transform::new_vec(Vector::new(x as f32, -6., y as f32)),
+                LightMaterialMarker,
+                RigidBody::new(RigidBodyType::Fixed)
+                    .can_sleep(false)
+                    .build(),
+                Collider::new(ColliderShape::cuboid(0.5, 0.5, 0.5)).build(),
             ));
         }
     }
-
-    dbg!(entities.len());
-    world.spawn_batch(entities);
 
     let trans = Translation::new(0., 5., 10.);
     let quat = UnitQuaternion::from_euler_angles(
@@ -107,18 +145,27 @@ fn startup(mut world: EcsWorld, mut render: Res<RenderManagerResource>) {
         std::convert::Into::<Rad<f32>>::into(Deg(-20.)).0,
     );
 
-    world.spawn((Transform::new(Isometry3::from_parts(trans, quat)), Camera));
+    world.spawn((
+        Transform::new(Isometry3::from_parts(trans, quat)),
+        Camera,
+        RigidBody::new(RigidBodyType::Fixed)
+            .can_sleep(false)
+            //.linvel(NaVec3::new(0., -2., 0.))
+            .build(),
+        Collider::new(ColliderShape::ball(3.)).density(1.).build(),
+        PhysicsSyncDirectBodyModifications,
+        //PhysicsDontSyncRotation,
+    ));
 
     let render = render.get_static_mut();
 
-    let mesh = Mesh::build_cube(&render.device, 1., 1., 1.);
+    let mesh = Mesh::cube(&render.device);
 
-    render.material.set_mesh(mesh);
+    render.light_material.set_mesh(mesh);
 }
 
 #[system_fn(RuntimeUpdateSchedule)]
 fn fps_logger(
-    //query: SystemQuery<Read<TextureMaterialInstance>>,
     update: SchedData<RuntimeUpdateScheduleData>,
     mut prev_full_sec: Local<u64>,
     mut render_state: Res<RenderManagerResource>,
@@ -129,8 +176,24 @@ fn fps_logger(
         dbg!(1. / update.dt.as_secs_f64());
         *prev_full_sec = update.since_start.as_secs_f64() as u64;
         dbg!(*prev_full_sec);
+    }
+}
 
-        dbg!(render_state.camera_uniform.view_pos);
+#[system_fn(RuntimeUpdateSchedule)]
+fn move_objects_away(
+    mut camera: SystemQuery<&Transform, With<Camera>>,
+    mut bodies: SystemQuery<(&Transform, &mut LinearVelocity)>,
+) {
+    let camera = match camera.get_single() {
+        Ok(x) => x,
+        Err(_) => return,
+    };
+
+    for (trans, mut vel) in bodies.iter_mut() {
+        let mut vec = camera.translation.vector - trans.translation.vector;
+        vec.normalize_mut();
+
+        vel.0 = vec * 2.;
     }
 }
 
@@ -145,7 +208,8 @@ pub async fn run() {
         .buffer_manager
         .register_new_buffer::<InstanceBufferType>();
 
-    let render_states = dupe(runtime).get_resource_mut::<RenderManagerResource>();
+    let render_states = runtime.get_resource_mut::<RenderManagerResource>();
+    let render = TypedAddr::new_with_ref(render_states);
 
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new()
@@ -155,32 +219,31 @@ pub async fn run() {
 
     window.set_cursor_visible(false);
 
-    EngineRuntime::init_rendering(window).await;
+    runtime.init_rendering(window).await;
 
     startup!(runtime);
     fps_logger!(runtime);
     update_rendering!(runtime);
 
-    update_texture_material!(runtime);
+    //update_texture_material!(runtime);
+    update_light_material!(runtime);
+    //move_light!(runtime);
 
     physics_systems(runtime);
-    //update_texture_material!(runtime);
-    /*step_physics!(runtime);
-    sync_physics_transform!(runtime);
-    sync_fixed_bodies_to_rapier!(runtime);
-    handle_rigidbody_insert!(runtime);*/
 
-    move_stuff_up!(runtime);
+    //move_objects_away!(runtime);
 
-    dupe(runtime)
+    //move_stuff_up!(runtime);
+
+    runtime
         .get_resource_mut::<RuntimeUpdateSchedule>()
         .calc_dep_graph(runtime);
 
-    dupe(runtime)
+    runtime
         .get_resource_mut::<RuntimeEngineLoadSchedule>()
         .calc_dep_graph(runtime);
 
-    dupe(runtime)
+    runtime
         .get_resource_mut::<RuntimeEndFrameSchedule>()
         .calc_dep_graph(runtime);
 
@@ -190,66 +253,76 @@ pub async fn run() {
 
     let start = Instant::now();
     let mut prev_full_sec = 0_u64;
-    let window_ref = render_states.window.get_ref();
+    let window_ref = render_states.window.deref();
 
-    let load = dupe(runtime).get_resource_mut::<RuntimeEngineLoadSchedule>();
+    let load = runtime.get_resource_mut::<RuntimeEngineLoadSchedule>();
     load.execute(dupe(runtime));
 
     //render_states.material.register_systems(runtime);
-    event_loop.run(move |event, _window_target, control_flow| match event {
-        Event::DeviceEvent {
-             event: DeviceEvent::MouseMotion{ delta, },
-            .. // We're not using device_id currently
-        } => {
-            render_states.camera_controller.get_ref_mut().process_mouse(delta.0, delta.1);
-        }
 
-        Event::MainEventsCleared => {
-            (*window_ref).request_redraw();
-        }
-        Event::RedrawRequested(id) if id == (*window_ref).id() => {
-            let now = Instant::now();
-            let dt = now - last_render_time;
-            runtime.update(dt, start);
-            last_render_time = now;
+    event_loop.run(move |event, _window_target, control_flow| {
+        span!(trace_loop, "event loop");
 
-            let since_start = now - start;
-            let since_start = since_start.as_secs_f32();
-            if prev_full_sec != since_start as u64 {
-                //println!("fps: {}", 1. / dt.as_secs_f32());
-                prev_full_sec = since_start as u64;
+        match event {
+            Event::NewEvents(StartCause::Poll) => {
+                let now = Instant::now();
+                let dt = now - last_render_time;
+
+
+                runtime.update(dt, start);
+                last_render_time = now;
+                //dbg!(1. / dt.as_secs_f32());
+                let since_start = now - start;
+                let since_start = since_start.as_secs_f32();
+                if prev_full_sec != since_start as u64 {
+                    //println!("fps: {}", 1. / dt.as_secs_f32());
+                    prev_full_sec = since_start as u64;
+                }
+
+                match runtime.render() {
+                    Ok(_) => {}
+                    Err(SurfaceError::Lost) => runtime.resize(*render.get().size),
+                    Err(SurfaceError::Outdated) => control_flow.set_exit(),
+                    Err(e) => eprintln!("{:?}", e),
+                }
+
+                #[cfg(not(feature = "prod"))]
+                tracing_tracy::client::frame_mark();
+            }
+            Event::DeviceEvent {
+                event: DeviceEvent::MouseMotion{ delta, },
+                .. // We're not using device_id currently
+            } => {
+                render.get().camera_controller.deref_mut().process_mouse(delta.0, delta.1);
             }
 
-
-            match runtime.render() {
-                Ok(_) => {}
-                Err(SurfaceError::Lost) => {
-                    runtime.resize(*render_states.size.get_ref())
-                },
-                Err(SurfaceError::Outdated) => control_flow.set_exit(),
-                Err(e) => eprintln!("{:?}", e),
+            /*Event::MainEventsCleared => {
+                (*window_ref).request_redraw();
+                (*window_ref).request_redraw();
             }
-        }
-        Event::WindowEvent {
-            ref event,
-            window_id,
-        } if window_id == window_ref.deref().id() => {
-            if !runtime.window_events(event) {
-                match event {
-                    WindowEvent::CloseRequested | get_key_pressed!(VirtualKeyCode::Escape) => {
-                        control_flow.set_exit()
+            Event::RedrawRequested(id) if id == (*window_ref).id() => {
+            }*/
+            Event::WindowEvent {
+                ref event,
+                window_id,
+            } if window_id == window_ref.id() => {
+                if !runtime.window_events(event) {
+                    match event {
+                        WindowEvent::CloseRequested | get_key_pressed!(VirtualKeyCode::Escape) => {
+                            control_flow.set_exit()
+                        }
+                        WindowEvent::Resized(size) => runtime.resize(*size),
+                        WindowEvent::ScaleFactorChanged {
+                            scale_factor: _,
+                            new_inner_size,
+                        } => runtime.resize(**new_inner_size),
+
+                        _ => {}
                     }
-                    WindowEvent::Resized(size) => runtime.resize(*size),
-                    WindowEvent::ScaleFactorChanged {
-                        scale_factor: _,
-                        new_inner_size,
-                    } => runtime.resize(**new_inner_size),
-
-                    _ => {}
                 }
             }
+            _ => {}
         }
-        _ => {}
     });
 }
 
@@ -483,6 +556,16 @@ impl<T> Deref for Lateinit<T> {
         }
     }
 }
+impl<T> DerefMut for Lateinit<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        match &mut self.value {
+            LateinitEnum::Some(value) => value,
+            LateinitEnum::Uninited => {
+                panic!("dereferenced an uninited value")
+            }
+        }
+    }
+}
 impl<T> Default for Lateinit<T> {
     fn default() -> Self {
         Self {
@@ -501,33 +584,6 @@ impl<T: Clone> Clone for Lateinit<T> {
         }
     }
 }
-
-/*#[system_fn(RuntimeEngineLoadSchedule)]
-fn test_a(_q: SystemQuery<(Read<A>, Write<A>)>) {}
-fn test_b(_q: SystemQuery<(Read<A>, Write<A>)>) {}
-fn test_c(_q: SystemQuery<(Read<A>, Write<A>)>) {}
-fn test_d(_q: SystemQuery<(Read<A>, Write<A>)>) {}
-fn test_e(_q: SystemQuery<(Read<A>, Write<A>)>) {}
-fn test_f(_q: SystemQuery<(Read<A>, Write<A>)>) {}
-fn test_g(_q: SystemQuery<(Read<A>, Write<A>)>) {}
-fn test_h(_q: SystemQuery<(Read<A>, Write<A>)>) {}
-
-#[derive(Comp, Default)]
-struct A {}
-#[derive(Comp, Default)]
-struct B {}
-#[derive(Comp, Default)]
-struct C {}
-#[derive(Comp, Default)]
-struct D {}
-#[derive(Comp, Default)]
-struct E {}
-#[derive(Comp, Default)]
-struct F {}
-#[derive(Comp, Default)]
-struct G {}
-#[derive(Comp, Default)]
-struct H {}*/
 
 pub struct ThreadRawPointer<T>(pub *mut T);
 impl<T> ThreadRawPointer<T> {

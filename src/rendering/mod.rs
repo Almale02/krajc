@@ -1,3 +1,4 @@
+pub mod builtin_materials;
 pub mod camera;
 pub mod managers;
 pub mod material;

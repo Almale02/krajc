@@ -1,4 +1,3 @@
-use core::panic;
 use std::{
     any::{Any, TypeId},
     collections::HashMap,
@@ -8,7 +7,7 @@ use crate::{
     ecs::ecs_manager::EcsManager,
     physics::physics_world::PhysicsWorld,
     rendering::{buffer_manager::buffer_manager::BufferManager, managers::RenderManagerResource},
-    typed_addr::TypedAddr,
+    typed_addr::{dupe, TypedAddr},
     ENGINE_RUNTIME,
 };
 
@@ -40,16 +39,15 @@ impl EngineRuntime {
     pub fn new() -> Self {
         Self {
             physics: PhysicsWorld::default(),
-            paralellism: {
-                match std::env::var("KRAJC_PARALLELISM") {
+            paralellism: { false },
+            /*match std::env::var("KRAJC_PARALLELISM") {
                 Ok(value) => {match value.as_str() {
                     "true" => true,
                     "false" => false,
                     _ => panic!("invalid value for env variable KRAJC_PARALLELISM, value should be 'true' or 'false'")
                 }},
                 Err(_) => true/*{true}*/,
-            }
-            },
+            }*/
             state: EngineStateManager {
                 generic: GenericStateManager::new(),
             },
@@ -74,11 +72,11 @@ impl EngineRuntime {
         x?;
         Some(TypedAddr::new(*x.unwrap()).get())
     }
-    pub fn get_resource_mut<T: EngineResource>(&'static mut self) -> &'static mut T {
-        T::get_mut(self)
+    pub fn get_resource_mut<T: EngineResource>(&mut self) -> &'static mut T {
+        T::get_mut(dupe(self))
     }
-    pub fn get_resource<T: EngineResource>(&'static mut self) -> &'static T {
-        T::get(self)
+    pub fn get_resource<T: EngineResource>(&mut self) -> &'static T {
+        T::get(dupe(self))
     }
 }
 #[derive(Default)]

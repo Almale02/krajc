@@ -121,7 +121,7 @@ impl<T> DerefMut for GenericStateRefTemplate<T> {
 }
 
 pub struct GenericStateManager {
-    data: HashMap<u128, GenericEngineStateManagerValue>,
+    pub data: HashMap<u128, GenericEngineStateManagerValue>,
     pub named_keys: HashMap<String, u128>,
     pub new_key: u128,
 }
@@ -289,7 +289,7 @@ impl<T> GenericStateRef<T> {
             (*(*self.render_resource_manager).get_value(self.id))
                 .value
                 .downcast_ref::<T>()
-                .unwrap()
+                .unwrap_or_else(|| panic!("generic state manager unwrapped on {}", self.id))
         }
     }
 }

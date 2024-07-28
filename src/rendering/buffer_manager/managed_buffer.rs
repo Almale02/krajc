@@ -83,14 +83,14 @@ impl<T: ManagedBufferGeneric + 'static> ManagedBufferInstanceHandle<T> {
             .get_buffer::<T>()
             .get_buffer(self.clone())
     }
-    pub fn set_data<A: NoUninit>(&'static self, data: A) {
+    pub fn set_data<A: NoUninit>(&self, data: A) {
         self.clone()
             .engine
             .buffer_manager
             .get_buffer_mut::<T>()
             .update_buffer(self.clone(), data);
     }
-    pub fn set_data_vec<A: NoUninit>(&'static self, data: Vec<A>) {
+    pub fn set_data_vec<A: NoUninit>(&self, data: Vec<A>) {
         self.clone()
             .engine
             .buffer_manager

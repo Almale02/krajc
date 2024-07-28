@@ -4,11 +4,6 @@
 struct CameraUniform {
     view_proj: mat4x4<f32>,
 };
-struct AspectUniform{
-    aspect_ratio: f32,
-    width: f32,
-    height: f32,
-};
 
 struct InstanceInput {
     @location(5) model_matrix_0: vec4<f32>,
@@ -20,8 +15,6 @@ struct InstanceInput {
 @group(1) @binding(0) // 1.
 var<uniform> camera: CameraUniform;
 
-@group(2) @binding(0) // 1.
-var<uniform> aspect: AspectUniform;
 
 struct VertexInput {
     @location(0) position: vec3<f32>,
@@ -62,5 +55,7 @@ var s_diffuse: sampler;
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+
     return textureSample(t_diffuse, s_diffuse, in.uv);
+
 }

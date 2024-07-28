@@ -1,19 +1,22 @@
+use krajc::EngineResource;
 use wgpu::*;
 
 use crate::{
     engine_runtime::{
         engine_state_manager::generic_state_manager::GenericStateRefTemplate,
-        schedule_manager::system_params::system_resource::EngineResource, EngineRuntime,
+        schedule_manager::system_params::system_resource::EngineResource,
     },
-    generate_state_struct, InstanceBufferType, UniformBufferType,
+    generate_state_struct, InstanceBufferType, Lateinit, UniformBufferType,
 };
 
 use super::{
     aspect_ratio::AspectUniform,
     buffer_manager::managed_buffer::ManagedBufferInstanceHandle,
+    builtin_materials::{
+        light_material::material::{LightMaterial, LightUniform},
+        texture_material::material::TextureMaterial,
+    },
     camera::camera::{CameraController, CameraUniform, Projection},
-    material::TextureMaterial,
-    render_entity::render_entity::TextureMaterialInstance,
     texture::texture::Texture,
 };
 
@@ -26,39 +29,35 @@ pub mod window;
 
 type S = &'static str;
 
-generate_state_struct!(RenderManagerResource {
-     adapter: Adapter = "adapter",
-     surface: Surface = "surface",
-     device: Device = "device",
-     queue: Queue = "queue",
-     config: SurfaceConfiguration = "config",
-     size: winit::dpi::PhysicalSize<u32> = "size",
-     render_pipeline: RenderPipeline = "render_pipeline",
+#[derive(Default, EngineResource)]
+pub struct RenderManagerResource {
+    pub adapter: Lateinit<Adapter>,
+    pub surface: Lateinit<Surface>,
+    pub device: Lateinit<Device>,
+    pub queue: Lateinit<Queue>,
+    pub config: Lateinit<SurfaceConfiguration>,
+    pub size: Lateinit<winit::dpi::PhysicalSize<u32>>,
 
-     texture: Texture = "texture",
-     depth_texture: Texture = "depth_texture",
+    pub texture: Lateinit<Texture>,
+    pub depth_texture: Lateinit<Texture>,
 
-     window: winit::window::Window = "window",
+    pub window: Lateinit<winit::window::Window>,
 
-     instance_scheme: Vec<TextureMaterialInstance> = "instance_scheme",
-     instance_buffer: ManagedBufferInstanceHandle<InstanceBufferType>= "instance_buffer",
+    pub instance_buffer: Lateinit<ManagedBufferInstanceHandle<InstanceBufferType>>,
 
-     projection: Projection = "projection",
-     camera_controller: CameraController = "camera_controller",
-     camera_uniform: CameraUniform = "camera_uniform",
-     camera_buffer: ManagedBufferInstanceHandle<UniformBufferType> = "camera_buffer",
-     camera_buffer_actual: Buffer = "camera_buffer_actual",
-     camera_bind_group: BindGroup = "camera_bind_group",
+    pub projection: Lateinit<Projection>,
+    pub camera_controller: Lateinit<CameraController>,
+    pub camera_uniform: Lateinit<CameraUniform>,
+    pub camera_buffer: Lateinit<ManagedBufferInstanceHandle<UniformBufferType>>,
 
-     aspect_uniform: AspectUniform = "aspect_uniform",
-     aspect_buffer: Buffer = "aspect_buffer",
-     aspect_bind_group: BindGroup = "aspect_bind_group",
+    pub light_uniform: Lateinit<LightUniform>,
+    pub light_buffer: Lateinit<ManagedBufferInstanceHandle<UniformBufferType>>,
 
-     clear_color: Color = "clear_color",
+    pub clear_color: Lateinit<Color>,
 
-     material: TextureMaterial = "texture_material",
-
-});
+    pub material: Lateinit<TextureMaterial>,
+    pub light_material: Lateinit<LightMaterial>,
+}
 impl Clone for RenderManagerResource {
     fn clone(&self) -> Self {
         Self::default()

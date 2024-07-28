@@ -11,9 +11,7 @@ use crate::{
     ThreadRawPointer, ENGINE_RUNTIME,
 };
 
-use super::{
-    runtime_schedule::RuntimeEngineLoadSchedule, system_params::system_param::SystemParalellFilter,
-};
+use super::system_params::system_param::SystemParalellFilter;
 
 pub struct Schedule<STATE> {
     pub schedule_name: String,
@@ -56,16 +54,18 @@ pub fn single_thread_scheduler(
     state: usize,
 ) {
     for action in actions.iter_mut() {
+        crate::span!(trace, stringify!(action.name()));
         action.run(dupe(engine), state);
     }
-    //let a = calc_dep_graph(&mut self.actions, dupe(engine));
     let thread_num = thread::available_parallelism().unwrap().into_integer() - 1;
-    dbg!(thread_num);
+    //dbg!(thread_num);
 }
 #[macro_export]
 macro_rules! implement_schedule {
     ($type: ty) => {
+        #[allow(unused_imports)]
         use $crate::engine_runtime::schedule_manager::schedule::*;
+
         impl $type {
             pub fn new(name: &str, schedule_state_addr: usize) -> Self {
                 Self {
@@ -80,8 +80,10 @@ macro_rules! implement_schedule {
                 self.dep_graph = calc_dep_graph(&mut self.actions, dupe(engine));
                 dbg!(start.elapsed());
             }
+
+            #[allow(unused_assignments)]
             pub fn execute(&'static mut self, engine: &'static mut EngineRuntime) {
-                //dbg!(engine.paralellism);
+                $crate::span!(trace_exec, stringify!($type));
                 if !engine.paralellism {
                     single_thread_scheduler(engine, &mut self.actions, self.schedule_state.addr);
 
@@ -101,6 +103,9 @@ macro_rules! implement_schedule {
                 let mut active_deps: HashSet<usize> = ids.keys().copied().collect();
 
                 let thread_num = thread::available_parallelism().unwrap().into_integer() - 1;
+
+                $crate::span!(trace_start_exec, "paralell_exec");
+                $crate::span!(trace_thread_create, "create_threads");
 
                 for _i in 0..thread_num {
                     let engine = TypedAddr::new_with_ref(engine);
@@ -130,6 +135,9 @@ macro_rules! implement_schedule {
                         }
                     }));
                 }
+                $crate::drop_span!(trace_thread_create);
+
+                $crate::span!(trace_start_main_thread, "thread_execution_main_loop");
 
                 for (id, deps) in dep_graph.iter() {
                     if deps.is_disjoint(&active_deps) {
@@ -185,10 +193,13 @@ macro_rules! implement_schedule {
                         to_execute.remove(id);
                     }
                 }
+                $crate::span!(trace_join_threads, "join_threads");
                 for join in thread_join {
                     let _ = join.join();
                 }
-                //dbg!(pre.elapsed());
+                $crate::drop_span!(trace_join_threads);
+                $crate::drop_span!(trace_start_main_thread);
+                $crate::drop_span!(trace_start_exec);
             }
             pub fn register(&mut self, action: Box<dyn ScheduleRunnable>) {
                 self.actions.push(action);
@@ -199,6 +210,46 @@ macro_rules! implement_schedule {
     };
 }
 
+#[macro_export]
+macro_rules! span {
+    ($name: expr) => {
+        tracing_tracy::client::span!($name)
+    };
+    ($var: ident, $name: expr) => {
+        #[cfg(not(feature = "prod"))]
+        let $var = $crate::span!($name);
+    };
+}
+
+#[macro_export]
+macro_rules! drop_span {
+    ($var: ident) => {
+        #[cfg(not(feature = "prod"))]
+        drop($var);
+    };
+}
+
+#[macro_export]
+macro_rules! implement_schedule_main {
+    ($type: ty) => {
+        impl $type {
+            pub fn new(name: &str, schedule_state_addr: usize) -> Self {
+                Self {
+                    schedule_name: name.to_string(),
+                    actions: Vec::default(),
+                    schedule_state: TypedAddr::new(schedule_state_addr),
+                }
+            }
+            pub fn execute(&'static mut self, engine: &'static mut EngineRuntime) {
+                //dbg!(engine.paralellism);
+                single_thread_scheduler(engine, &mut self.actions, self.schedule_state.addr);
+            }
+            pub fn register(&mut self, action: Box<dyn ScheduleRunnable>) {
+                self.actions.push(action);
+            }
+        }
+    };
+}
 pub fn calc_dep_graph(
     systems: &'static mut [Box<dyn ScheduleRunnable>],
     engine: &'static mut EngineRuntime,
@@ -291,7 +342,8 @@ fn check_if_compatible(
 ) -> bool {
     for param in first {
         for other_param in second {
-            if !param.filter_against_param(other_param) {
+            if !(param.filter_against_param(other_param) && other_param.filter_against_param(param))
+            {
                 return false;
             }
         }
@@ -305,4 +357,34 @@ pub enum MainToThreadExecutorMsg {
 }
 pub enum ThreadExecutorToMainMsg {
     SystemExecuted(usize),
+}
+
+#[macro_export]
+macro_rules! create_schedule {
+    ($sched_type: ident, $data_type: ident) => {
+        struct_with_default!($sched_type {
+            schedule_name: String = "update".into(),
+            actions: Vec<Box<dyn ScheduleRunnable>> = Vec::default(),
+            schedule_state: TypedAddr<$data_type> = TypedAddr::new_with_ref($data_type::init()),
+            dep_graph: DepGraph = DepGraph::default(),
+        });
+        generate_state_struct_non_resource!($data_type {
+            dummy: u32 = "dummy" => 0
+        });
+        implement_schedule!($sched_type);
+    };
+}
+#[macro_export]
+macro_rules! create_schedule_main {
+    ($sched_type: ident, $data_type: ident) => {
+        struct_with_default!($sched_type {
+            schedule_name: String = "update".into(),
+            actions: Vec<Box<dyn ScheduleRunnable>> = Vec::default(),
+            schedule_state: TypedAddr<$data_type> = TypedAddr::new_with_ref($data_type::init()),
+        });
+        generate_state_struct_non_resource!($data_type {
+            dummy: u32 = "dummy" => 0
+        });
+        implement_schedule_main!($sched_type);
+    };
 }

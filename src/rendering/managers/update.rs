@@ -1,26 +1,35 @@
-use std::{
-    any::TypeId,
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
+
+use krajc::not_prod;
+use log::{Level, LevelFilter};
+use rapier3d::{dynamics::IntegrationParameters, utils::smallest_abs_diff_between_angles};
+use tracing_tracy::client::frame_mark;
 
 use crate::{
+    drop_span,
     engine_runtime::{
         schedule_manager::runtime_schedule::{
-            RuntimeEndFrameData, RuntimeEndFrameSchedule, RuntimeUpdateSchedule,
+            RuntimeEndFrameSchedule, RuntimePostEndFrameMainSchedule, RuntimeUpdateSchedule,
         },
         EngineRuntime,
     },
-    typed_addr::{dupe, TypedAddr},
+    physics::{physics_world::PhysicsWorld, Gravity},
+    typed_addr::dupe,
     ENGINE_RUNTIME,
 };
 
 impl EngineRuntime {
     pub fn update(&mut self, dt: Duration, start: Instant) {
+        crate::span!(span, "update span");
+
         let _dt_f64 = dt.as_secs_f64();
+
+        let physics = self.get_resource_mut::<PhysicsWorld>();
+        let gravity = self.get_resource_mut::<Gravity>();
+
         let engine = unsafe { ENGINE_RUNTIME.get() };
         {
-            let runtime_schedule_state: &mut RuntimeUpdateSchedule =
-                dupe(engine).get_resource_mut();
+            let runtime_schedule_state: &mut RuntimeUpdateSchedule = engine.get_resource_mut();
             let update_state = runtime_schedule_state.schedule_state.get();
 
             *update_state.dt = dt;
@@ -28,11 +37,38 @@ impl EngineRuntime {
 
             runtime_schedule_state.execute(dupe(engine));
         }
-        /*{
-            let schedule = engine.get_resource::<RuntimeEndFrameSchedule>();
+        {
+            let schedule = engine.get_resource_mut::<RuntimeEndFrameSchedule>();
             //let schedule_data = schedule.schedule_state.get();
             schedule.execute(dupe(engine));
-        }*/
+        }
+        {
+            let schedule = engine.get_resource_mut::<RuntimePostEndFrameMainSchedule>();
+            //let schedule_data = schedule.schedule_state.get();
+            schedule.execute(dupe(engine));
+        }
+        let event_handler = ();
+
+        crate::span!(trace_physics, "physics");
+
+        dupe(&physics).physics_pipeline.step(
+            &gravity.0,
+            &IntegrationParameters::default(),
+            &mut dupe(&physics).island_manager,
+            &mut dupe(&physics).broad_phase,
+            &mut dupe(&physics).narrow_phase,
+            &mut dupe(&physics).rigid_body_set,
+            &mut dupe(&physics).collider_set,
+            &mut dupe(&physics).impulse_joint_set,
+            &mut dupe(&physics).multibody_joint_set,
+            &mut dupe(&physics).ccd_solver,
+            Some(&mut dupe(&physics).query_pipeline),
+            &event_handler,
+            &event_handler,
+        );
+
+        drop_span!(trace_physics);
+
         self.ecs.world.clear_trackers();
     }
 }

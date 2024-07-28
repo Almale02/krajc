@@ -9,10 +9,11 @@ use wgpu::{
 pub struct TextureVertex {
     pub pos: [f32; 3],
     pub uv: [f32; 2],
+    pub normal: [f32; 3],
 }
 impl TextureVertex {
-    const ATTRIBS: [wgpu::VertexAttribute; 2] =
-        wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x2];
+    const ATTRIBS: [wgpu::VertexAttribute; 3] =
+        wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x2, 2 => Float32x3];
 
     pub fn layout() -> wgpu::VertexBufferLayout<'static> {
         use std::mem;
@@ -33,7 +34,7 @@ pub struct Mesh {
 }
 
 impl Mesh {
-    pub fn square(device: &Device) -> Self {
+    /*pub fn square(device: &Device) -> Self {
         let vertex_list = Box::new([
             TextureVertex {
                 // 0 up left
@@ -88,46 +89,46 @@ impl Mesh {
             vertex_buffer,
             index_buffer,
         }
-    }
+    }*/
 
     pub fn cube(device: &Device) -> Self {
         #[rustfmt::skip]
         let vertex_list = Box::new([
             // Front face
-            TextureVertex { pos: [-0.5, 0.5, 0.5], uv: [0.0, 1.0] }, // 0
-            TextureVertex { pos: [-0.5, -0.5, 0.5], uv: [0.0, 0.0] }, // 1
-            TextureVertex { pos: [0.5, -0.5, 0.5], uv: [1.0, 0.0] }, // 2
-            TextureVertex { pos: [0.5, 0.5, 0.5], uv: [1.0, 1.0] }, // 3
+            TextureVertex { pos: [-0.5, 0.5, 0.5], uv: [0.0, 1.0],normal: [0.0, 0.0, 1.0] }, // 0
+            TextureVertex { pos: [-0.5, -0.5, 0.5], uv: [0.0, 0.0], normal: [0.0, 0.0, 1.0] }, // 1
+            TextureVertex { pos: [0.5, -0.5, 0.5], uv: [1.0, 0.0], normal: [0.0, 0.0, 1.0] }, // 2
+            TextureVertex { pos: [0.5, 0.5, 0.5], uv: [1.0, 1.0], normal: [0.0, 0.0, 1.0] }, // 3
 
             // Back face
-            TextureVertex { pos: [0.5, 0.5, -0.5], uv: [0.0, 1.0] }, // 4
-            TextureVertex { pos: [0.5, -0.5, -0.5], uv: [0.0, 0.0] }, // 5
-            TextureVertex { pos: [-0.5, -0.5, -0.5], uv: [1.0, 0.0] }, // 6
-            TextureVertex { pos: [-0.5, 0.5, -0.5], uv: [1.0, 1.0] }, // 7
+            TextureVertex { pos: [0.5, 0.5, -0.5], uv: [0.0, 1.0],normal: [0.0, 0.0, -1.0] }, // 4
+            TextureVertex { pos: [0.5, -0.5, -0.5], uv: [0.0, 0.0],normal: [0.0, 0.0, -1.0] }, // 5
+            TextureVertex { pos: [-0.5, -0.5, -0.5], uv: [1.0, 0.0],normal: [0.0, 0.0, -1.0] }, // 6
+            TextureVertex { pos: [-0.5, 0.5, -0.5], uv: [1.0, 1.0],normal: [0.0, 0.0, -1.0] }, // 7
 
             // Top face
-            TextureVertex { pos: [-0.5, 0.5, -0.5], uv: [0.0, 1.0] }, // 8
-            TextureVertex { pos: [-0.5, 0.5, 0.5], uv: [0.0, 0.0] }, // 9
-            TextureVertex { pos: [0.5, 0.5, 0.5], uv: [1.0, 0.0] }, // 10
-            TextureVertex { pos: [0.5, 0.5, -0.5], uv: [1.0, 1.0] }, // 11
+            TextureVertex { pos: [-0.5, 0.5, -0.5], uv: [0.0, 1.0], normal: [0.0, 1.0, 0.0]}, // 8
+            TextureVertex { pos: [-0.5, 0.5, 0.5], uv: [0.0, 0.0], normal: [0.0, 1.0, 0.0]}, // 9
+            TextureVertex { pos: [0.5, 0.5, 0.5], uv: [1.0, 0.0], normal: [0.0, 1.0, 0.0]}, // 10
+            TextureVertex { pos: [0.5, 0.5, -0.5], uv: [1.0, 1.0], normal: [0.0, 1.0, 0.0]}, // 11
 
             // Bottom face
-            TextureVertex { pos: [-0.5, -0.5, 0.5], uv: [0.0, 1.0] }, // 12
-            TextureVertex { pos: [-0.5, -0.5, -0.5], uv: [0.0, 0.0] }, // 13
-            TextureVertex { pos: [0.5, -0.5, -0.5], uv: [1.0, 0.0] }, // 14
-            TextureVertex { pos: [0.5, -0.5, 0.5], uv: [1.0, 1.0] }, // 15
+            TextureVertex { pos: [-0.5, -0.5, 0.5], uv: [0.0, 1.0], normal: [0.0, -1.0, 0.0]}, // 12
+            TextureVertex { pos: [-0.5, -0.5, -0.5], uv: [0.0, 0.0], normal: [0.0, -1.0, 0.0]}, // 13
+            TextureVertex { pos: [0.5, -0.5, -0.5], uv: [1.0, 0.0], normal: [0.0, -1.0, 0.0]}, // 14
+            TextureVertex { pos: [0.5, -0.5, 0.5], uv: [1.0, 1.0], normal: [0.0, -1.0, 0.0]}, // 15
 
             // Right face
-            TextureVertex { pos: [0.5, 0.5, 0.5], uv: [0.0, 1.0] }, // 16
-            TextureVertex { pos: [0.5, -0.5, 0.5], uv: [0.0, 0.0] }, // 17
-            TextureVertex { pos: [0.5, -0.5, -0.5], uv: [1.0, 0.0] }, // 18
-            TextureVertex { pos: [0.5, 0.5, -0.5], uv: [1.0, 1.0] }, // 19
+            TextureVertex { pos: [0.5, 0.5, 0.5], uv: [0.0, 1.0], normal: [1.0, 0.0, 0.0]}, // 16
+            TextureVertex { pos: [0.5, -0.5, 0.5], uv: [0.0, 0.0], normal: [1.0, 0.0, 0.0]}, // 17
+            TextureVertex { pos: [0.5, -0.5, -0.5], uv: [1.0, 0.0], normal: [1.0, 0.0, 0.0]}, // 18
+            TextureVertex { pos: [0.5, 0.5, -0.5], uv: [1.0, 1.0], normal: [1.0, 0.0, 0.0]}, // 19
 
             // Left face
-            TextureVertex { pos: [-0.5, 0.5, -0.5], uv: [0.0, 1.0] }, // 20
-            TextureVertex { pos: [-0.5, -0.5, -0.5], uv: [0.0, 0.0] }, // 21
-            TextureVertex { pos: [-0.5, -0.5, 0.5], uv: [1.0, 0.0] }, // 22
-            TextureVertex { pos: [-0.5, 0.5, 0.5], uv: [1.0, 1.0] }, // 23
+            TextureVertex { pos: [-0.5, 0.5, -0.5], uv: [0.0, 1.0], normal: [-1.0, 0.0, 0.0]}, // 20
+            TextureVertex { pos: [-0.5, -0.5, -0.5], uv: [0.0, 0.0], normal: [-1.0, 0.0, 0.0]}, // 21
+            TextureVertex { pos: [-0.5, -0.5, 0.5], uv: [1.0, 0.0], normal: [-1.0, 0.0, 0.0]}, // 22
+            TextureVertex { pos: [-0.5, 0.5, 0.5], uv: [1.0, 1.0], normal: [-1.0, 0.0, 0.0]}, // 23
         ]);
 
         #[rustfmt::skip]
@@ -174,103 +175,127 @@ impl Mesh {
             TextureVertex {
                 pos: [-half_width, half_height, half_depth],
                 uv: [0.0, 1.0],
+                normal: [0.0, 0.0, 1.0],
             }, // 0
             TextureVertex {
                 pos: [-half_width, -half_height, half_depth],
                 uv: [0.0, 0.0],
+                normal: [0.0, 0.0, 1.0],
             }, // 1
             TextureVertex {
                 pos: [half_width, -half_height, half_depth],
                 uv: [1.0, 0.0],
+                normal: [0.0, 0.0, 1.0],
             }, // 2
             TextureVertex {
                 pos: [half_width, half_height, half_depth],
                 uv: [1.0, 1.0],
+                normal: [0.0, 0.0, 1.0],
             }, // 3
             // Back face
             TextureVertex {
                 pos: [half_width, half_height, -half_depth],
                 uv: [0.0, 1.0],
+                normal: [0.0, 0.0, -1.0],
             }, // 4
             TextureVertex {
                 pos: [half_width, -half_height, -half_depth],
                 uv: [0.0, 0.0],
+                normal: [0.0, 0.0, -1.0],
             }, // 5
             TextureVertex {
                 pos: [-half_width, -half_height, -half_depth],
                 uv: [1.0, 0.0],
+                normal: [0.0, 0.0, -1.0],
             }, // 6
             TextureVertex {
                 pos: [-half_width, half_height, -half_depth],
                 uv: [1.0, 1.0],
+                normal: [0.0, 0.0, -1.0],
             }, // 7
             // Top face
             TextureVertex {
                 pos: [-half_width, half_height, -half_depth],
                 uv: [0.0, 1.0],
+                normal: [0.0, 1.0, 0.0],
             }, // 8
             TextureVertex {
                 pos: [-half_width, half_height, half_depth],
                 uv: [0.0, 0.0],
+                normal: [0.0, 1.0, 0.0],
             }, // 9
             TextureVertex {
                 pos: [half_width, half_height, half_depth],
                 uv: [1.0, 0.0],
+                normal: [0.0, 1.0, 0.0],
             }, // 10
             TextureVertex {
                 pos: [half_width, half_height, -half_depth],
                 uv: [1.0, 1.0],
+                normal: [0.0, 1.0, 0.0],
             }, // 11
             // Bottom face
             TextureVertex {
                 pos: [-half_width, -half_height, half_depth],
                 uv: [0.0, 1.0],
+                normal: [0.0, -1.0, 0.0],
             }, // 12
             TextureVertex {
                 pos: [-half_width, -half_height, -half_depth],
                 uv: [0.0, 0.0],
+                normal: [0.0, -1.0, 0.0],
             }, // 13
             TextureVertex {
                 pos: [half_width, -half_height, -half_depth],
                 uv: [1.0, 0.0],
+                normal: [0.0, -1.0, 0.0],
             }, // 14
             TextureVertex {
                 pos: [half_width, -half_height, half_depth],
                 uv: [1.0, 1.0],
+                normal: [0.0, -1.0, 0.0],
             }, // 15
             // Right face
             TextureVertex {
                 pos: [half_width, half_height, half_depth],
                 uv: [0.0, 1.0],
+                normal: [1.0, 0.0, 0.0],
             }, // 16
             TextureVertex {
                 pos: [half_width, -half_height, half_depth],
                 uv: [0.0, 0.0],
+                normal: [1.0, 0.0, 0.0],
             }, // 17
             TextureVertex {
                 pos: [half_width, -half_height, -half_depth],
                 uv: [1.0, 0.0],
+                normal: [1.0, 0.0, 0.0],
             }, // 18
             TextureVertex {
                 pos: [half_width, half_height, -half_depth],
                 uv: [1.0, 1.0],
+                normal: [1.0, 0.0, 0.0],
             }, // 19
             // Left face
             TextureVertex {
                 pos: [-half_width, half_height, -half_depth],
                 uv: [0.0, 1.0],
+                normal: [-1.0, 0.0, 0.0],
             }, // 20
             TextureVertex {
                 pos: [-half_width, -half_height, -half_depth],
                 uv: [0.0, 0.0],
+                normal: [-1.0, 0.0, 0.0],
             }, // 21
             TextureVertex {
                 pos: [-half_width, -half_height, half_depth],
                 uv: [1.0, 0.0],
+                normal: [-1.0, 0.0, 0.0],
             }, // 22
             TextureVertex {
                 pos: [-half_width, half_height, half_depth],
                 uv: [1.0, 1.0],
+                normal: [-1.0, 0.0, 0.0],
             }, // 23
         ]);
 

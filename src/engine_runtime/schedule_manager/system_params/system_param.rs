@@ -1,5 +1,3 @@
-use std::any::Any;
-
 use mopa::mopafy;
 
 use crate::{
@@ -7,10 +5,7 @@ use crate::{
     typed_addr::TypedAddr,
 };
 
-use super::{
-    system_query::SystemQueryFilterable,
-    system_resource::{EngineResource, Res},
-};
+use super::system_resource::{EngineResource, Res};
 
 pub struct SystemParam {
     pub engine: &'static mut EngineRuntime,

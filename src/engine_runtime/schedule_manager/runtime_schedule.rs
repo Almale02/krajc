@@ -1,9 +1,10 @@
+/// creates the schedule that are necessary to run the engine and develop your game
 use bytemuck::Contiguous;
-use cgmath::{num_traits::identities, Zero};
-use std::{ops::DerefMut, thread};
+use std::thread;
 
 use crate::{
-    generate_state_struct_non_resource, typed_addr::dupe, ThreadRawPointer, ENGINE_RUNTIME,
+    create_schedule, create_schedule_main, generate_state_struct_non_resource,
+    implement_schedule_main, span, typed_addr::dupe, ThreadRawPointer,
 };
 use std::{
     collections::{HashMap, HashSet},
@@ -13,9 +14,8 @@ use std::{
 };
 
 use super::{
-    super::EngineRuntime,
-    schedule::ScheduleRunnable,
-    system_params::{system_param::SystemParalellFilter, system_resource::EngineResource},
+    super::EngineRuntime, schedule::ScheduleRunnable,
+    system_params::system_resource::EngineResource,
 };
 use crate::{
     engine_runtime::engine_state_manager::generic_state_manager::GenericStateRefTemplate,
@@ -26,12 +26,6 @@ pub type DepGraph = (
     Vec<(usize, std::collections::HashSet<usize>)>,
     HashMap<usize, &'static Box<dyn ScheduleRunnable>>,
 );
-/*pub static mut SCHEDULE_STATES: TypedAddr<RuntimeScheduleResource> = TypedAddr::<_>::default();
-
-generate_state_struct!(RuntimeScheduleResource {
-    engine_loaded: Schedule<RuntimeEngineLoadScheduleState> = "engine_loaded" => Schedule::new("engine_loaded", RuntimeEngineLoadScheduleState::init()),
-    update: Schedule<RuntimeUpdateScheduleState> = "update" => Schedule::new("update", RuntimeUpdateScheduleState::init()),
-}, SCHEDULE_STATES);*/
 
 struct_with_default!(RuntimeUpdateSchedule {
     schedule_name: String = "update".into(),
@@ -45,27 +39,13 @@ generate_state_struct_non_resource!(RuntimeUpdateScheduleData {
 });
 implement_schedule!(RuntimeUpdateSchedule);
 
-struct_with_default!(RuntimeEngineLoadSchedule{
-    schedule_name: String = "engine_load".into(),
-    actions: Vec<Box<dyn ScheduleRunnable>> = Vec::default(),
-    schedule_state: TypedAddr<RuntimeEngineLoadScheduleData> = TypedAddr::new_with_ref(RuntimeEngineLoadScheduleData::init()),
-    dep_graph: DepGraph = DepGraph::default(),
-});
-generate_state_struct_non_resource!(RuntimeEngineLoadScheduleData {
-    dummy: u32 = "dummy" => 0
-});
-implement_schedule!(RuntimeEngineLoadSchedule);
+create_schedule!(RuntimePostUpdateSchedule, RuntimePostUpdateData);
 
-struct_with_default!(RuntimeEndFrameSchedule {
-    schedule_name: String = "end_frame".into(),
-    actions: Vec<Box<dyn ScheduleRunnable>> = Vec::default(),
-    schedule_state: TypedAddr<RuntimeEndFrameData> = TypedAddr::new_with_ref(RuntimeEndFrameData::init()),
-    dep_graph: DepGraph = DepGraph::default(),
-});
-generate_state_struct_non_resource!(RuntimeEndFrameData {
-    dummy: u32 = "dummy" => 0
-});
-implement_schedule!(RuntimeEndFrameSchedule);
+create_schedule!(RuntimeEndFrameSchedule, RuntimeEndFrameData);
+
+create_schedule_main!(RuntimePostEndFrameMainSchedule, RuntimePostEndFrameMainData);
+
+create_schedule!(RuntimeEngineLoadSchedule, RuntimeEngineLoadData);
 
 pub trait IterExt {
     type T;

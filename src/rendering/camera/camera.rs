@@ -1,8 +1,7 @@
 use bevy_ecs::component::Component;
-use cgmath::{perspective, InnerSpace, Matrix4, Point3, Rad, Vector3};
+use cgmath::{perspective, InnerSpace, Matrix4, Rad};
 //use cgmath::*;
-use krajc::Comp;
-use rapier3d::na::{OPoint, Translation, Translation3, UnitQuaternion};
+use rapier3d::na::UnitQuaternion;
 use std::f32::consts::FRAC_PI_2;
 use winit::{
     dpi::PhysicalPosition,
@@ -79,7 +78,7 @@ pub struct CameraUniform {
 impl CameraUniform {
     pub fn update_view_proj(&mut self, iso: &mut Transform, projection: &Projection) {
         let pos = cgmath::Point3::new(iso.translation.x, iso.translation.y, iso.translation.z);
-        self.view_pos = pos.to_homogeneous().into();
+        //self.view_pos = pos.to_homogeneous().into();
         self.view_proj = (projection.calc_matrix() * Camera::calc_matrix(iso)).into();
     }
 }

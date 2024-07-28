@@ -1,15 +1,14 @@
 use std::{
-    collections::HashSet,
     marker::PhantomData,
-    ops::{BitAnd, Deref, DerefMut},
+    ops::{Deref, DerefMut},
 };
 
 use bevy_ecs::{
     component::ComponentId,
     entity::Entity,
     query::{
-        FilteredAccess, QueryBuilder, QueryData, QueryEntityError, QueryFilter, QueryIter,
-        QuerySingleError, QueryState, ROQueryItem,
+        FilteredAccess, QueryData, QueryEntityError, QueryFilter, QueryIter, QuerySingleError,
+        QueryState, ROQueryItem,
     },
     world::World,
 };
@@ -113,7 +112,7 @@ impl<Data: QueryData, Filter: QueryFilter> SystemQuery<Data, Filter> {
     /// [`get_single_mut`](Self::get_single_mut) to return a `Result` instead of panicking.
     #[track_caller]
     #[inline]
-    pub fn single_mut<'w>(&'w mut self) -> Data::Item<'w> {
+    pub fn single_mut<'w>(&'w mut self) -> Result<Data::Item<'w>, QuerySingleError> {
         self.provider.single_mut(self.world)
     }
 
