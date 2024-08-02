@@ -3,13 +3,14 @@ use std::time::{Duration, Instant};
 use krajc::not_prod;
 use log::{Level, LevelFilter};
 use rapier3d::{dynamics::IntegrationParameters, utils::smallest_abs_diff_between_angles};
-use tracing_tracy::client::frame_mark;
+use tracing_tracy::client::{frame_mark, SpanLocation};
 
 use crate::{
     drop_span,
     engine_runtime::{
         schedule_manager::runtime_schedule::{
-            RuntimeEndFrameSchedule, RuntimePostEndFrameMainSchedule, RuntimeUpdateSchedule,
+            RuntimePhysicsSyncMainSchedule, RuntimePostPhysicsSyncSchedule,
+            RuntimePostUpdateSchedule, RuntimeUpdateSchedule, RuntimeUpdateScheduleData,
         },
         EngineRuntime,
     },
@@ -30,20 +31,25 @@ impl EngineRuntime {
         let engine = unsafe { ENGINE_RUNTIME.get() };
         {
             let runtime_schedule_state: &mut RuntimeUpdateSchedule = engine.get_resource_mut();
-            let update_state = runtime_schedule_state.schedule_state.get();
+            let update_state = engine.get_resource_mut::<RuntimeUpdateScheduleData>();
 
-            *update_state.dt = dt;
-            *update_state.since_start = Instant::now() - start;
+            update_state.dt = dt;
+            update_state.since_start = Instant::now() - start;
 
             runtime_schedule_state.execute(dupe(engine));
         }
         {
-            let schedule = engine.get_resource_mut::<RuntimeEndFrameSchedule>();
+            let schedule = engine.get_resource_mut::<RuntimePostUpdateSchedule>();
             //let schedule_data = schedule.schedule_state.get();
             schedule.execute(dupe(engine));
         }
         {
-            let schedule = engine.get_resource_mut::<RuntimePostEndFrameMainSchedule>();
+            let schedule = engine.get_resource_mut::<RuntimePhysicsSyncMainSchedule>();
+            //let schedule_data = schedule.schedule_state.get();
+            schedule.execute(dupe(engine));
+        }
+        {
+            let schedule = engine.get_resource_mut::<RuntimePostPhysicsSyncSchedule>();
             //let schedule_data = schedule.schedule_state.get();
             schedule.execute(dupe(engine));
         }

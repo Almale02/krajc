@@ -2,13 +2,16 @@ use std::ops::Deref;
 use std::ops::DerefMut;
 use std::ops::Neg;
 
+use crate::engine_runtime::schedule_manager::runtime_schedule::RuntimePhysicsSyncMainSchedule;
+use crate::engine_runtime::schedule_manager::system_params::system_local::Local;
 use crate::engine_runtime::schedule_manager::system_params::system_query::SystemQuery;
+use crate::physics::components::general::LinearVelocity;
+use crate::physics::components::general::RigidBody;
+use crate::physics::components::general::RigidBodyHandle;
 use crate::rendering::camera::camera::Camera;
-use crate::AspectUniform;
-use crate::Marker;
 use crate::RenderManagerResource;
 use crate::RuntimeUpdateScheduleData;
-use crate::SchedData;
+use crate::TextureMaterialMarker;
 
 use bevy_ecs::component::Component;
 use bevy_ecs::entity::Entity;
@@ -53,16 +56,17 @@ impl DerefMut for Transform {
 
 #[system_fn(RuntimeUpdateSchedule)]
 pub fn update_rendering(
-    mut camera: SystemQuery<&mut Transform, (With<Camera>, Without<Marker>)>, // you can see that i am using bevy for querying,
-    mut render_state: Res<RenderManagerResource>, // my own resource system
-    update: SchedData<RuntimeUpdateScheduleData>, // data related to the schedule like delta time
+    mut camera: SystemQuery<&mut Transform, With<Camera>>, // you can see that i am using bevy for querying,
+    mut render_state: Res<RenderManagerResource>,          // my own resource system
+    update: Res<RuntimeUpdateScheduleData>, // data related to the schedule like delta time
 ) {
     let render_state = render_state.get_static_mut();
 
-    let mut iso = match camera.single_mut() {
+    let mut iso = match camera.get_single_mut() {
         Ok(x) => x,
         Err(e) => return,
     };
+    //dbg!(&iso.iso);
 
     render_state
         .camera_controller
@@ -74,31 +78,35 @@ pub fn update_rendering(
     render_state
         .camera_buffer
         .set_data(*render_state.camera_uniform);
-
-    let trans = iso;
-    dbg!(trans.translation);
 }
 
 #[system_fn(RuntimeUpdateSchedule)]
-pub fn move_stuff_up(mut objects: SystemQuery<(Entity, &mut Transform), With<Marker>>) {
+pub fn move_stuff_up(
+    mut objects: SystemQuery<(Entity, &mut Transform), With<TextureMaterialMarker>>,
+) {
     objects.iter_mut().for_each(|(id, mut trans)| {
         trans.translation.y += 0.1 + (id.index() as f32) / 50000.;
     })
 }
 
+#[derive(Component)]
+pub struct Light;
+#[derive(Component)]
+pub struct Color(pub wgpu::Color);
+
 #[system_fn(RuntimeUpdateSchedule)]
-pub fn move_light(
+pub fn sync_light(
     mut render_state: Res<RenderManagerResource>,
-    mut camera: SystemQuery<&mut Transform, (With<Camera>, Without<Marker>)>,
+    mut light: SystemQuery<(&Transform, &Color), With<Light>>,
 ) {
-    let trans = camera.get_single();
+    let (trans, color) = {
+        if light.get_single().is_err() {
+            return;
+        } else {
+            light.single()
+        }
+    };
 
-    if trans.is_err() {
-        return;
-    }
-    let trans = trans.unwrap();
-
-    //let old_position: cgmath::Vector4<_> = render_state.light_uniform.position.into();
     let new_pos = cgmath::Vector3::new(
         trans.translation.x,
         trans.translation.y,
@@ -107,8 +115,26 @@ pub fn move_light(
 
     render_state.light_uniform.position =
         cgmath::Vector4::new(new_pos.x, new_pos.y, new_pos.z, 0.).into();
+    render_state.light_uniform.color = [color.0.r as f32, color.0.g as f32, color.0.b as f32, 0.];
 
     render_state
         .light_buffer
         .set_data(*render_state.light_uniform);
+}
+#[system_fn(RuntimeUpdateSchedule)]
+pub fn make_light_follow_camera(
+    mut camera: SystemQuery<&Transform, With<Camera>>,
+    mut light: SystemQuery<(&mut Transform, &mut LinearVelocity), With<Light>>,
+) {
+    let (camera) = camera.single().iso;
+    let (light, mut lin_vel) = match light.get_single_mut() {
+        Ok(x) => x,
+        Err(_) => return,
+    };
+
+    let light = light.iso;
+
+    let dir = camera.translation.vector - light.translation.vector;
+
+    lin_vel.0 = dir * 0.12;
 }

@@ -112,7 +112,7 @@ impl<Data: QueryData, Filter: QueryFilter> SystemQuery<Data, Filter> {
     /// [`get_single_mut`](Self::get_single_mut) to return a `Result` instead of panicking.
     #[track_caller]
     #[inline]
-    pub fn single_mut<'w>(&'w mut self) -> Result<Data::Item<'w>, QuerySingleError> {
+    pub fn single_mut<'w>(&'w mut self) -> Data::Item<'w> {
         self.provider.single_mut(self.world)
     }
 

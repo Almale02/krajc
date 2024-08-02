@@ -51,7 +51,7 @@ impl<T: ManagedBufferGeneric + 'static> ManagedBufferInstanceHandle<T> {
         let engine = unsafe { ENGINE_RUNTIME.get() };
         engine
             .buffer_manager
-            .get_buffer_mut::<T>()
+            .get_buffer_type_mut::<T>()
             .create_managed_buffer_size(instance.clone(), size);
 
         instance
@@ -61,7 +61,7 @@ impl<T: ManagedBufferGeneric + 'static> ManagedBufferInstanceHandle<T> {
         let engine = unsafe { ENGINE_RUNTIME.get() };
         engine
             .buffer_manager
-            .get_buffer_mut::<T>()
+            .get_buffer_type_mut::<T>()
             .create_managed_buffer_init(instance.clone(), data);
 
         instance
@@ -71,7 +71,7 @@ impl<T: ManagedBufferGeneric + 'static> ManagedBufferInstanceHandle<T> {
         let engine = unsafe { ENGINE_RUNTIME.get() };
         engine
             .buffer_manager
-            .get_buffer_mut::<T>()
+            .get_buffer_type_mut::<T>()
             .create_managed_buffer_init_vec(instance.clone(), data);
 
         instance
@@ -80,21 +80,21 @@ impl<T: ManagedBufferGeneric + 'static> ManagedBufferInstanceHandle<T> {
         self.clone()
             .engine
             .buffer_manager
-            .get_buffer::<T>()
+            .get_buffer_type::<T>()
             .get_buffer(self.clone())
     }
     pub fn set_data<A: NoUninit>(&self, data: A) {
         self.clone()
             .engine
             .buffer_manager
-            .get_buffer_mut::<T>()
+            .get_buffer_type_mut::<T>()
             .update_buffer(self.clone(), data);
     }
     pub fn set_data_vec<A: NoUninit>(&self, data: Vec<A>) {
         self.clone()
             .engine
             .buffer_manager
-            .get_buffer_mut::<T>()
+            .get_buffer_type_mut::<T>()
             .update_buffer_vec(self.clone(), data);
     }
 }

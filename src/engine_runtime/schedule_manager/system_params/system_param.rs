@@ -9,7 +9,6 @@ use super::system_resource::{EngineResource, Res};
 
 pub struct SystemParam {
     pub engine: &'static mut EngineRuntime,
-    pub schedule_data: usize,
     pub position: u8,
     pub fn_name: &'static str,
 }
@@ -43,7 +42,7 @@ macro_rules! impl_schedule_runnable {
         where
             $($param: From<SystemParam> + IntoSystemParalellFilter + 'static),*
         {
-            fn run(&mut self, runtime: &'static mut EngineRuntime, schedule_state: usize) {
+            fn run(&mut self, runtime: &'static mut EngineRuntime) {
                 let runtime = TypedAddr::<EngineRuntime>::new(runtime as *mut _ as usize);
                 let mut position = 0;
                 // Call the function
@@ -54,7 +53,6 @@ macro_rules! impl_schedule_runnable {
                             position += 1;
                             let a = SystemParam {
                                 engine: runtime.get(),
-                                schedule_data: schedule_state,
                                 fn_name: self.name(),
                                 position,
                             };
@@ -63,14 +61,13 @@ macro_rules! impl_schedule_runnable {
                     )*
                 );
             }
-            fn setup_filter(&mut self, runtime: &'static mut EngineRuntime, schedule_state: usize) {
+            fn setup_filter(&mut self, runtime: &'static mut EngineRuntime) {
                 let runtime = TypedAddr::<EngineRuntime>::new(runtime as *mut _ as usize);
                 let mut position = 0;
                     $(
                         position += 1;
                         let a = std::convert::Into::<$param>::into(SystemParam {
                             engine: runtime.get(),
-                            schedule_data: schedule_state,
                             fn_name: self.name(),
                             position,
                         });
@@ -79,7 +76,7 @@ macro_rules! impl_schedule_runnable {
                     )*
 
             }
-            fn predicate(&self, _runtime: &'static EngineRuntime, _schedule_state: usize) -> bool {
+            fn predicate(&self, _runtime: &'static EngineRuntime) -> bool {
                 true
             }
             fn name(&self) -> &'static str {

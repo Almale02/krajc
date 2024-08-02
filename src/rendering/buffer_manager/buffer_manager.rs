@@ -19,19 +19,29 @@ impl BufferManager {
             buffers: Default::default(),
         }
     }
-    pub fn register_new_buffer<T: ManagedBufferGeneric + Default + 'static>(&'static mut self) {
+    pub fn register_new_buffer_type<T: ManagedBufferGeneric + Default + 'static>(
+        &'static mut self,
+    ) {
         self.buffers.insert(
             TypeId::of::<T>(),
             Box::leak(Box::new(T::default()))
                 .get_managed_buffer(self.engine.get_resource_mut::<RenderManagerResource>()),
         );
     }
-    pub fn get_buffer<T: ManagedBufferGeneric + 'static>(&'static self) -> &'static ManagedBuffer {
+    pub fn get_buffer_type<T: ManagedBufferGeneric + 'static>(
+        &'static self,
+    ) -> &'static ManagedBuffer {
         self.buffers.get(&TypeId::of::<T>()).unwrap()
     }
-    pub fn get_buffer_mut<T: ManagedBufferGeneric + 'static>(
+    pub fn get_buffer_type_mut<T: ManagedBufferGeneric + 'static>(
         &'static mut self,
     ) -> &'static mut ManagedBuffer {
         self.buffers.get_mut(&TypeId::of::<T>()).unwrap()
+    }
+}
+
+impl Default for BufferManager {
+    fn default() -> Self {
+        Self::new()
     }
 }

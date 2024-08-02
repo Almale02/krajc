@@ -5,7 +5,7 @@ use wgpu::{Buffer, RenderPass, RenderPipeline};
 use crate::engine_runtime::EngineRuntime;
 
 pub trait MaterialGeneric {
-    fn render_pipeline(&self, engine: &mut EngineRuntime) -> RenderPipeline; //
+    fn render_pipeline(&mut self, engine: &mut EngineRuntime) -> &RenderPipeline; //
     fn vertex_buffer(&self, engine: &mut EngineRuntime) -> &'static Buffer; //
     fn index_buffer(&self, engine: &mut EngineRuntime) -> &'static Buffer; //
     fn instance_buffer(&self, engine: &mut EngineRuntime) -> &'static Buffer; //

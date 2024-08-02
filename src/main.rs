@@ -2,7 +2,8 @@
 #![allow(clippy::module_inception)]
 #![allow(macro_expanded_macro_exports_accessed_by_absolute_paths)]
 //#![feature(negative_impls)]
-//#![feature(stmt_expr_attributes)]
+#![feature(stmt_expr_attributes)]
+#![feature(async_closure)]
 #![allow(clippy::type_complexity)]
 
 use crate::rendering::systems::general::update_rendering;
@@ -10,6 +11,11 @@ use bevy_ecs::{component::Component, query::With};
 
 //pub type QueryFilter<A, B = Passthrough> = EntityFilterTuple<A, B>;
 
+use futures::{
+    future::{join_all, BoxFuture},
+    stream::{FuturesOrdered, FuturesUnordered},
+    FutureExt,
+};
 use krajc::system_fn;
 use physics::{
     components::{
@@ -19,7 +25,6 @@ use physics::{
     systems::rigid_body::physics_systems,
     Gravity,
 };
-use pollster::FutureExt;
 use rapier3d::{
     dynamics::{RigidBodySet, RigidBodyType},
     geometry::ColliderShape,
@@ -27,10 +32,14 @@ use rapier3d::{
     na::{Isometry3, UnitQuaternion, Vector3 as Vector},
 };
 
+use tracing_tracy::client::SpanLocation;
 use typed_addr::{dupe, TypedAddr};
+use uuid::Uuid;
 
 use std::{
+    any::{type_name, Any, TypeId},
     collections::HashMap,
+    future::Future,
     hash::Hash,
     ops::{Deref, DerefMut},
     rc::Rc,
@@ -44,14 +53,14 @@ use rapier3d::na::Vector3 as NaVec3;
 use engine_runtime::{
     schedule_manager::{
         runtime_schedule::{
-            RuntimeEndFrameSchedule, RuntimeUpdateSchedule, RuntimeUpdateScheduleData,
+            RuntimePhysicsSyncMainSchedule, RuntimePostPhysicsSyncSchedule,
+            RuntimePostUpdateSchedule, RuntimeUpdateSchedule, RuntimeUpdateScheduleData,
         },
         schedule::ScheduleRunnable,
         system_params::{
             system_local::Local,
             system_query::{EcsWorld, SystemQuery},
             system_resource::Res,
-            system_schedule_data::SchedData,
         },
     },
     EngineRuntime,
@@ -59,7 +68,6 @@ use engine_runtime::{
 
 use ordered_float::OrderedFloat;
 use rendering::{
-    aspect_ratio::AspectUniform,
     buffer_manager::{managed_buffer::ManagedBufferGeneric, InstanceBufferType, UniformBufferType},
     builtin_materials::{
         light_material::material::update_light_material,
@@ -67,8 +75,11 @@ use rendering::{
     },
     camera::camera::Camera,
     managers::RenderManagerResource,
-    mesh::mesh::Mesh,
-    systems::general::{move_light, move_stuff_up, Transform},
+    mesh::mesh::{Mesh, TextureVertexTemplates},
+    render_resources::ResourceLoader,
+    systems::general::{
+        make_light_follow_camera, move_stuff_up, sync_light, Color, Light, Transform,
+    },
 };
 
 use wgpu::{BufferUsages, SurfaceError};
@@ -85,28 +96,29 @@ pub mod engine_runtime;
 pub mod rendering;
 pub mod typed_addr;
 
-/*#[cfg(not(feature="prod"))]
+/*#[cfg(not(feature = "prod"))]
 #[global_allocator]
 static ALLOC: GlobalAllocatorSampled = GlobalAllocatorSampled::new(100);*/
 
 fn main() {
-    run().block_on();
+    pollster::block_on(run());
 }
 
 #[derive(Component)]
-pub struct Marker;
+pub struct TextureMaterialMarker;
 
 #[derive(Component)]
 pub struct LightMaterialMarker;
 
 #[system_fn(RuntimeEngineLoadSchedule)]
-fn startup(mut world: EcsWorld, mut render: Res<RenderManagerResource>, gravity: Res<Gravity>) {
+fn startup(mut world: EcsWorld, mut render: Res<RenderManagerResource>, mut gravity: Res<Gravity>) {
+    gravity.0 = NaVec3::new(0.04, -0.5, 0.);
     dbg!("ran startup");
     //let mut entities = vec![];
 
     //gravity.0 = NaVec3::new(0., -2., 0.);
 
-    let stack = 1;
+    let stack = 2;
     let width = 32;
     let height = 32;
 
@@ -125,8 +137,8 @@ fn startup(mut world: EcsWorld, mut render: Res<RenderManagerResource>, gravity:
             }
         }
     }
-    for y in 0..16 {
-        for x in 0..16 {
+    for y in 0..32 {
+        for x in 0..32 {
             world.spawn((
                 Transform::new_vec(Vector::new(x as f32, -6., y as f32)),
                 LightMaterialMarker,
@@ -157,16 +169,31 @@ fn startup(mut world: EcsWorld, mut render: Res<RenderManagerResource>, gravity:
         //PhysicsDontSyncRotation,
     ));
 
+    world.spawn((
+        RigidBody::new(RigidBodyType::Dynamic).build(),
+        TextureMaterialMarker,
+        Light,
+        Transform::new_vec(NaVec3::new(0., 10., 0.)),
+        Color(wgpu::Color {
+            r: 1.,
+            g: 1.,
+            b: 1.,
+            a: 1.,
+        }),
+    ));
+
     let render = render.get_static_mut();
 
-    let mesh = Mesh::cube(&render.device);
+    let mesh = TextureVertexTemplates::cube(&render.device);
+    let light_mesh = TextureVertexTemplates::build_cube(&render.device, 0.3, 0.3, 0.3);
 
     render.light_material.set_mesh(mesh);
+    render.texture_material.set_mesh(light_mesh);
 }
 
 #[system_fn(RuntimeUpdateSchedule)]
 fn fps_logger(
-    update: SchedData<RuntimeUpdateScheduleData>,
+    update: Res<RuntimeUpdateScheduleData>,
     mut prev_full_sec: Local<u64>,
     mut render_state: Res<RenderManagerResource>,
 ) {
@@ -179,34 +206,51 @@ fn fps_logger(
     }
 }
 
-#[system_fn(RuntimeUpdateSchedule)]
-fn move_objects_away(
-    mut camera: SystemQuery<&Transform, With<Camera>>,
-    mut bodies: SystemQuery<(&Transform, &mut LinearVelocity)>,
-) {
-    let camera = match camera.get_single() {
-        Ok(x) => x,
-        Err(_) => return,
-    };
-
-    for (trans, mut vel) in bodies.iter_mut() {
-        let mut vec = camera.translation.vector - trans.translation.vector;
-        vec.normalize_mut();
-
-        vel.0 = vec * 2.;
-    }
-}
+type BoxedFuture = BoxFuture<'static, ()>;
 
 pub async fn run() {
     let runtime = EngineRuntime::init();
 
+    let thread_rx: flume::Receiver<(Uuid, Box<dyn ResourceLoader>)> =
+        runtime.render_resource_manager.thread_rx.clone();
+    let thread_tx: flume::Sender<(Uuid, Box<dyn Any + Send>)> =
+        runtime.render_resource_manager.thread_tx.clone();
+    std::thread::spawn(move || {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let rx = thread_rx;
+        let tx = thread_tx;
+
+        rt.spawn(async move {
+            let futures = FuturesUnordered::new();
+            loop {
+                let tx = tx.clone();
+
+                match rx.recv() {
+                    Ok((uuid, mut loader)) => {
+                        let future = async move {
+                            let result: Box<dyn Any + Send> = loader.start_loading().await;
+
+                            tx.send((uuid, result)).unwrap();
+                        }
+                        .boxed();
+                        futures.push(future);
+                    }
+                    Err(_) => continue,
+                }
+            }
+        });
+    });
+
     runtime.buffer_manager.engine = unsafe { ENGINE_RUNTIME.get() };
     dupe(runtime)
         .buffer_manager
-        .register_new_buffer::<UniformBufferType>();
+        .register_new_buffer_type::<UniformBufferType>();
     dupe(runtime)
         .buffer_manager
-        .register_new_buffer::<InstanceBufferType>();
+        .register_new_buffer_type::<InstanceBufferType>();
 
     let render_states = runtime.get_resource_mut::<RenderManagerResource>();
     let render = TypedAddr::new_with_ref(render_states);
@@ -224,16 +268,14 @@ pub async fn run() {
     startup!(runtime);
     fps_logger!(runtime);
     update_rendering!(runtime);
+    sync_light!(runtime);
 
-    //update_texture_material!(runtime);
     update_light_material!(runtime);
-    //move_light!(runtime);
+    update_texture_material!(runtime);
+
+    make_light_follow_camera!(runtime);
 
     physics_systems(runtime);
-
-    //move_objects_away!(runtime);
-
-    //move_stuff_up!(runtime);
 
     runtime
         .get_resource_mut::<RuntimeUpdateSchedule>()
@@ -244,7 +286,11 @@ pub async fn run() {
         .calc_dep_graph(runtime);
 
     runtime
-        .get_resource_mut::<RuntimeEndFrameSchedule>()
+        .get_resource_mut::<RuntimePostUpdateSchedule>()
+        .calc_dep_graph(runtime);
+
+    runtime
+        .get_resource_mut::<RuntimePostPhysicsSyncSchedule>()
         .calc_dep_graph(runtime);
 
     env_logger::init();
@@ -279,12 +325,14 @@ pub async fn run() {
                     prev_full_sec = since_start as u64;
                 }
 
+                span!(trace_render, "rendering");
                 match runtime.render() {
                     Ok(_) => {}
                     Err(SurfaceError::Lost) => runtime.resize(*render.get().size),
                     Err(SurfaceError::Outdated) => control_flow.set_exit(),
                     Err(e) => eprintln!("{:?}", e),
                 }
+                drop_span!(trace_render);
 
                 #[cfg(not(feature = "prod"))]
                 tracing_tracy::client::frame_mark();
@@ -544,6 +592,23 @@ impl<T> Lateinit<T> {
     fn set(&mut self, value: T) {
         self.value = LateinitEnum::<T>::Some(value);
     }
+    fn as_option(&self) -> Option<&T> {
+        match &self.value {
+            LateinitEnum::Some(val) => Some(val),
+            LateinitEnum::Uninited => None,
+        }
+    }
+    fn as_option_mut(&mut self) -> Option<&mut T> {
+        match &mut self.value {
+            LateinitEnum::Some(val) => Some(val),
+            LateinitEnum::Uninited => None,
+        }
+    }
+    const fn default_const() -> Self {
+        Lateinit {
+            value: LateinitEnum::Uninited,
+        }
+    }
 }
 impl<T> Deref for Lateinit<T> {
     type Target = T;
@@ -551,7 +616,10 @@ impl<T> Deref for Lateinit<T> {
         match &self.value {
             LateinitEnum::Some(value) => value,
             LateinitEnum::Uninited => {
-                panic!("dereferenced an uninited value")
+                panic!(
+                    "dereferenced an uninited value with type {:?}",
+                    type_name::<T>()
+                );
             }
         }
     }
@@ -561,7 +629,10 @@ impl<T> DerefMut for Lateinit<T> {
         match &mut self.value {
             LateinitEnum::Some(value) => value,
             LateinitEnum::Uninited => {
-                panic!("dereferenced an uninited value")
+                panic!(
+                    "dereferenced an uninited value with type {:?}",
+                    type_name::<T>()
+                );
             }
         }
     }
@@ -613,3 +684,13 @@ impl<T> DerefMut for ThreadRawPointer<T> {
 
 unsafe impl<T> Sync for ThreadRawPointer<T> {}
 unsafe impl<T> Send for ThreadRawPointer<T> {}
+
+pub trait FromEngine {
+    fn from_engine(engine: &'static mut EngineRuntime) -> Self;
+}
+
+impl<T: Default> FromEngine for T {
+    fn from_engine(_engine: &'static mut EngineRuntime) -> Self {
+        T::default()
+    }
+}

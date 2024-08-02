@@ -41,7 +41,7 @@ impl From<TextureMaterialInstance> for RawTextureMaterialInstance {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Default, Pod, Zeroable)]
+#[derive(Clone, Debug, Copy, Default, Pod, Zeroable)]
 pub struct RawTextureMaterialInstance {
     pub model: [[f32; 4]; 4],
 }

@@ -4,6 +4,10 @@ use wgpu::{
     Buffer, BufferUsages, Device,
 };
 
+pub trait Vertex {
+    fn layout() -> wgpu::VertexBufferLayout<'static>;
+}
+
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Pod, Zeroable)]
 pub struct TextureVertex {
@@ -14,10 +18,10 @@ pub struct TextureVertex {
 impl TextureVertex {
     const ATTRIBS: [wgpu::VertexAttribute; 3] =
         wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x2, 2 => Float32x3];
-
-    pub fn layout() -> wgpu::VertexBufferLayout<'static> {
+}
+impl Vertex for TextureVertex {
+    fn layout() -> wgpu::VertexBufferLayout<'static> {
         use std::mem;
-
         wgpu::VertexBufferLayout {
             array_stride: mem::size_of::<Self>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Vertex,
@@ -26,72 +30,16 @@ impl TextureVertex {
     }
 }
 #[derive(Debug)]
-pub struct Mesh {
-    pub vertex_list: Box<[TextureVertex]>,
+pub struct Mesh<V: Vertex> {
+    pub vertex_list: Box<[V]>,
     pub index_list: Box<[u16]>,
     pub vertex_buffer: Buffer,
     pub index_buffer: Buffer,
 }
 
-impl Mesh {
-    /*pub fn square(device: &Device) -> Self {
-        let vertex_list = Box::new([
-            TextureVertex {
-                // 0 up left
-                pos: [-0.5, 0.5, 0.],
-                uv: [0., 0.],
-            },
-            TextureVertex {
-                // 1 down left
-                pos: [-0.5, -0.5, 0.0],
-                uv: [0.0, 1.0],
-            },
-            TextureVertex {
-                // 2 down right
-                pos: [0.5, -0.5, 0.0],
-                uv: [1.0, 1.0],
-            },
-            TextureVertex {
-                // 3 up right
-                pos: [0.5, 0.5, 0.0],
-                uv: [1.0, 0.0],
-            },
-            TextureVertex {
-                // 0
-                pos: [-0.5, 0.5, 0.],
-                uv: [0., 0.],
-            },
-            TextureVertex {
-                // 2
-                pos: [0.5, -0.5, 0.0],
-                uv: [1.0, 1.0],
-            },
-        ]);
-        #[rustfmt::skip]
-        let index_list = Box::new([
-            2, 0, 3,
-            5, 1, 4,
-        ]);
-
-        let vertex_buffer = device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(&*vertex_list),
-            usage: BufferUsages::VERTEX,
-        });
-        let index_buffer = device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("Index Buffer"),
-            contents: bytemuck::cast_slice(&*index_list),
-            usage: BufferUsages::INDEX,
-        });
-        Mesh {
-            vertex_list,
-            index_list,
-            vertex_buffer,
-            index_buffer,
-        }
-    }*/
-
-    pub fn cube(device: &Device) -> Self {
+pub struct TextureVertexTemplates;
+impl TextureVertexTemplates {
+    pub fn cube(device: &Device) -> Mesh<TextureVertex> {
         #[rustfmt::skip]
         let vertex_list = Box::new([
             // Front face
@@ -165,7 +113,7 @@ impl Mesh {
         }
     }
 
-    pub fn build_cube(device: &Device, width: f32, height: f32, depth: f32) -> Self {
+    pub fn build_cube(device: &Device, width: f32, height: f32, depth: f32) -> Mesh<TextureVertex> {
         let half_width = width / 2.0;
         let half_height = height / 2.0;
         let half_depth = depth / 2.0;

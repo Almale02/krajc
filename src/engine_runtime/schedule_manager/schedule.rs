@@ -1,61 +1,37 @@
 use std::{
+    any::Any,
     collections::{HashMap, HashSet},
     thread,
 };
 
+use bevy_ecs::intern::Internable;
 use bytemuck::Contiguous;
+use tracing_tracy::client::{internal::Lazy, SpanLocation};
 
 use crate::{
     engine_runtime::{schedule_manager::runtime_schedule::IterExt, EngineRuntime},
     typed_addr::{dupe, TypedAddr},
-    ThreadRawPointer, ENGINE_RUNTIME,
+    Lateinit, ThreadRawPointer, ENGINE_RUNTIME,
 };
 
 use super::system_params::system_param::SystemParalellFilter;
 
-pub struct Schedule<STATE> {
-    pub schedule_name: String,
-    pub actions: Vec<Box<dyn ScheduleRunnable>>,
-    pub schedule_state: TypedAddr<STATE>,
-}
-impl<STATE> Schedule<STATE> {
-    pub fn new(name: &str, schedule_state_addr: usize) -> Self {
-        Self {
-            schedule_name: name.to_string(),
-            actions: Vec::default(),
-            schedule_state: TypedAddr::new(schedule_state_addr),
-        }
-    }
-    pub fn execute(&mut self) {
-        unsafe {
-            let runtime_raw = TypedAddr::new(ENGINE_RUNTIME.get() as *mut _ as usize);
-            for action in &mut self.actions {
-                if action.predicate(runtime_raw.get(), self.schedule_state.addr) {
-                    action.run(runtime_raw.get(), self.schedule_state.addr)
-                }
-            }
-        }
-    }
-    pub fn register(&mut self, action: Box<dyn ScheduleRunnable>) {
-        self.actions.push(action);
-    }
-}
 pub trait ScheduleRunnable {
-    fn run(&mut self, runtime: &'static mut EngineRuntime, schedule_state: usize);
-    fn predicate(&self, runtime: &'static EngineRuntime, schedule_state: usize) -> bool;
+    fn run(&mut self, runtime: &'static mut EngineRuntime);
+    fn predicate(&self, runtime: &'static EngineRuntime) -> bool;
     fn name(&self) -> &'static str;
-    fn setup_filter(&mut self, runtime: &'static mut EngineRuntime, schedule_state: usize);
+    fn setup_filter(&mut self, runtime: &'static mut EngineRuntime);
     fn get_params_filters(&self) -> &Vec<Box<dyn SystemParalellFilter>>;
 }
 
 pub fn single_thread_scheduler(
     engine: &'static mut EngineRuntime,
     actions: &mut Vec<Box<dyn ScheduleRunnable>>,
-    state: usize,
 ) {
     for action in actions.iter_mut() {
-        crate::span!(trace, stringify!(action.name()));
-        action.run(dupe(engine), state);
+        let name = action.name();
+
+        action.run(dupe(engine));
     }
     let thread_num = thread::available_parallelism().unwrap().into_integer() - 1;
     //dbg!(thread_num);
@@ -67,11 +43,10 @@ macro_rules! implement_schedule {
         use $crate::engine_runtime::schedule_manager::schedule::*;
 
         impl $type {
-            pub fn new(name: &str, schedule_state_addr: usize) -> Self {
+            pub fn new(name: &str) -> Self {
                 Self {
                     schedule_name: name.to_string(),
                     actions: Vec::default(),
-                    schedule_state: TypedAddr::new(schedule_state_addr),
                     dep_graph: DepGraph::default(),
                 }
             }
@@ -84,8 +59,9 @@ macro_rules! implement_schedule {
             #[allow(unused_assignments)]
             pub fn execute(&'static mut self, engine: &'static mut EngineRuntime) {
                 $crate::span!(trace_exec, stringify!($type));
+
                 if !engine.paralellism {
-                    single_thread_scheduler(engine, &mut self.actions, self.schedule_state.addr);
+                    single_thread_scheduler(engine, &mut self.actions);
 
                     return;
                 }
@@ -103,13 +79,11 @@ macro_rules! implement_schedule {
                 let mut active_deps: HashSet<usize> = ids.keys().copied().collect();
 
                 let thread_num = thread::available_parallelism().unwrap().into_integer() - 1;
-
                 $crate::span!(trace_start_exec, "paralell_exec");
                 $crate::span!(trace_thread_create, "create_threads");
 
                 for _i in 0..thread_num {
                     let engine = TypedAddr::new_with_ref(engine);
-                    let schedule_address = self.schedule_state.addr;
                     let tx = thread_tx.clone();
                     let rx = thread_rx.clone();
                     thread_join.push(thread::spawn(move || loop {
@@ -122,7 +96,7 @@ macro_rules! implement_schedule {
                                 }
                                 MainToThreadExecutorMsg::RunSystem(id, system) => {
                                     let system = dupe(*system);
-                                    system.run(engine.get(), schedule_address);
+                                    system.run(engine.get());
 
                                     tx.send(ThreadExecutorToMainMsg::SystemExecuted(id))
                                         .unwrap();
@@ -210,6 +184,72 @@ macro_rules! implement_schedule {
     };
 }
 
+/*
+
+
+
+    #[inline(always)]
+    #[must_use]
+    pub fn make_span_location(
+        type_name: &'static str,
+        span_name: *const u8,
+        file: *const u8,
+        line: u32,
+    ) -> SpanLocation {
+        #[cfg(feature = "enable")]
+        {
+            let function_name = CString::new(&type_name[..type_name.len() - 3]).unwrap();
+            SpanLocation {
+                data: sys::___tracy_source_location_data {
+                    name: span_name.cast(),
+                    function: function_name.as_ptr(),
+                    file: file.cast(),
+                    line,
+                    color: 0,
+                },
+                _function_name: function_name,
+            }
+        }
+        #[cfg(not(feature = "enable"))]
+        crate::SpanLocation { _internal: () }
+    }
+
+#[macro_export]
+macro_rules! span_location {
+    () => {{
+        struct S;
+        // String processing in `const` when, Oli?
+        static LOC: $crate::internal::Lazy<$crate::internal::SpanLocation> =
+            $crate::internal::Lazy::new(|| {
+                $crate::internal::make_span_location(
+                    $crate::internal::type_name::<S>(),
+                    $crate::internal::null(),
+                    concat!(file!(), "\0").as_ptr(),
+                    line!(),
+                )
+            });
+        &*LOC
+    }};
+    ($name: expr) => {{
+        struct S;
+        // String processing in `const` when, Oli?
+        static LOC: $crate::internal::Lazy<$crate::internal::SpanLocation> =
+            $crate::internal::Lazy::new(|| {
+                $crate::internal::make_span_location(
+                    $crate::internal::type_name::<S>(),
+                    concat!($name, "\0").as_ptr(),
+                    concat!(file!(), "\0").as_ptr(),
+                    line!(),
+                )
+            });
+        &*LOC
+    }};
+}
+
+
+
+*/
+
 #[macro_export]
 macro_rules! span {
     ($name: expr) => {
@@ -218,6 +258,18 @@ macro_rules! span {
     ($var: ident, $name: expr) => {
         #[cfg(not(feature = "prod"))]
         let $var = $crate::span!($name);
+    };
+}
+
+#[macro_export]
+macro_rules! span_slice {
+    ($var: ident, $slice: ident) => {
+        #[cfg(not(feature = "prod"))]
+        //let $var = $crate::span!($slice);
+        let $var = tracing_tracy::client::Client::running().unwrap().span(
+            create_loc_slice($slice, format!("{}, {}", file!(), line!())),
+            0,
+        );
     };
 }
 
@@ -231,18 +283,19 @@ macro_rules! drop_span {
 
 #[macro_export]
 macro_rules! implement_schedule_main {
-    ($type: ty) => {
+    ($type: ty, $data: ty) => {
         impl $type {
-            pub fn new(name: &str, schedule_state_addr: usize) -> Self {
+            pub fn new(name: &str, schedule_state: $data) -> Self {
                 Self {
                     schedule_name: name.to_string(),
                     actions: Vec::default(),
-                    schedule_state: TypedAddr::new(schedule_state_addr),
+                    schedule_state,
                 }
             }
             pub fn execute(&'static mut self, engine: &'static mut EngineRuntime) {
+                $crate::span!(trace_exec, stringify!($type));
                 //dbg!(engine.paralellism);
-                single_thread_scheduler(engine, &mut self.actions, self.schedule_state.addr);
+                single_thread_scheduler(engine, &mut self.actions);
             }
             pub fn register(&mut self, action: Box<dyn ScheduleRunnable>) {
                 self.actions.push(action);
@@ -267,7 +320,7 @@ pub fn calc_dep_graph(
     let mut groups: Vec<HashSet<usize>> = Vec::default();
 
     for (i, system) in systems.iter_mut_totallysafe().enumerate() {
-        system.setup_filter(dupe(engine), 0);
+        system.setup_filter(dupe(engine));
         ids.insert(i, system);
     }
 
@@ -365,11 +418,10 @@ macro_rules! create_schedule {
         struct_with_default!($sched_type {
             schedule_name: String = "update".into(),
             actions: Vec<Box<dyn ScheduleRunnable>> = Vec::default(),
-            schedule_state: TypedAddr<$data_type> = TypedAddr::new_with_ref($data_type::init()),
             dep_graph: DepGraph = DepGraph::default(),
         });
-        generate_state_struct_non_resource!($data_type {
-            dummy: u32 = "dummy" => 0
+        struct_with_default!($data_type {
+            dummy: u32 =  0
         });
         implement_schedule!($sched_type);
     };
@@ -380,11 +432,11 @@ macro_rules! create_schedule_main {
         struct_with_default!($sched_type {
             schedule_name: String = "update".into(),
             actions: Vec<Box<dyn ScheduleRunnable>> = Vec::default(),
-            schedule_state: TypedAddr<$data_type> = TypedAddr::new_with_ref($data_type::init()),
+            schedule_state: $data_type = $data_type::default(),
         });
-        generate_state_struct_non_resource!($data_type {
-            dummy: u32 = "dummy" => 0
+        struct_with_default!($data_type {
+            dummy: u32 = 0
         });
-        implement_schedule_main!($sched_type);
+        implement_schedule_main!($sched_type, $data_type);
     };
 }

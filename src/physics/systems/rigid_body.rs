@@ -10,7 +10,7 @@ use rapier3d::dynamics::{IntegrationParameters, IslandManager, RigidBodySet, Rig
 use crate::{
     engine_runtime::{
         schedule_manager::{
-            runtime_schedule::RuntimePostEndFrameMainSchedule,
+            runtime_schedule::RuntimePhysicsSyncMainSchedule,
             system_params::{
                 system_query::{EcsWorld, SystemQuery},
                 system_resource::{EngineResource, Res},
@@ -32,7 +32,7 @@ use crate::{
     typed_addr::dupe,
 };
 
-#[system_fn(RuntimePostEndFrameMainSchedule)]
+#[system_fn(RuntimePhysicsSyncMainSchedule)]
 pub fn step_physics(physics: Res<PhysicsWorld>, gravity: Res<Gravity>) {
     let event_handler = ();
 
@@ -53,7 +53,7 @@ pub fn step_physics(physics: Res<PhysicsWorld>, gravity: Res<Gravity>) {
     )
 }
 
-#[system_fn(RuntimePostEndFrameMainSchedule)]
+#[system_fn(RuntimePhysicsSyncMainSchedule)]
 pub fn handle_rigidbody_insert(
     mut added: SystemQuery<(Entity, &RB, &Transform), Added<RB>>,
     mut ecs: EcsWorld,
@@ -109,7 +109,7 @@ pub fn handle_rigidbody_insert(
     }
 }
 
-#[system_fn(RuntimePostEndFrameMainSchedule)]
+#[system_fn(RuntimePhysicsSyncMainSchedule)]
 pub fn sync_physics_transform(
     mut transforms: SystemQuery<(&mut Transform, Option<&PhysicsDontSyncRotation>), With<RBHandle>>,
     island_manager: Res<IslandManager>,
@@ -133,7 +133,7 @@ pub fn sync_physics_transform(
             }
         });
 }
-#[system_fn(RuntimePostEndFrameMainSchedule)]
+#[system_fn(RuntimePhysicsSyncMainSchedule)]
 pub fn sync_fixed_bodies_to_rapier(
     mut rigidbody_set: Res<RigidBodySet>,
     mut fixed: SystemQuery<(&RBHandle, &Transform), (With<FixedRigidBody> /*Changed<Transform>*/,)>,
@@ -145,7 +145,7 @@ pub fn sync_fixed_bodies_to_rapier(
     }
 }
 
-#[system_fn(RuntimePostEndFrameMainSchedule)]
+#[system_fn(RuntimePhysicsSyncMainSchedule)]
 pub fn sync_target_transform_kinematic_body(
     mut target_transform: SystemQuery<
         (&TargetKinematicTransform, &RBHandle),
@@ -161,7 +161,7 @@ pub fn sync_target_transform_kinematic_body(
             .set_next_kinematic_position(*target.0)
     }
 }
-#[system_fn(RuntimePostEndFrameMainSchedule)]
+#[system_fn(RuntimePhysicsSyncMainSchedule)]
 pub fn sync_target_vel_kinematic_body(
     mut target_transform: SystemQuery<
         (&TargetKinematicVelocity, &RBHandle),
@@ -181,7 +181,7 @@ pub fn sync_target_vel_kinematic_body(
     }
 }
 
-#[system_fn(RuntimePostEndFrameMainSchedule)]
+#[system_fn(RuntimePhysicsSyncMainSchedule)]
 pub fn sync_physics_direct_transform_modification(
     mut transforms: SystemQuery<
         (&Transform, &RBHandle),
@@ -196,7 +196,7 @@ pub fn sync_physics_direct_transform_modification(
     }
 }
 
-#[system_fn(RuntimePostEndFrameMainSchedule)]
+#[system_fn(RuntimePhysicsSyncMainSchedule)]
 pub fn mark_static_bodies_trans_changed(
     mut query: SystemQuery<&mut Transform, With<FixedRigidBody>>,
 ) {
@@ -205,7 +205,7 @@ pub fn mark_static_bodies_trans_changed(
     }
 }
 
-#[system_fn(RuntimePostEndFrameMainSchedule)]
+#[system_fn(RuntimePhysicsSyncMainSchedule)]
 pub fn sync_ang_vel_to_physics(
     mut ang_vels: SystemQuery<(&RBHandle, &AngularVelocity), Changed<AngularVelocity>>,
     mut rigidbody_set: Res<RigidBodySet>,
@@ -217,7 +217,7 @@ pub fn sync_ang_vel_to_physics(
     }
 }
 
-#[system_fn(RuntimePostEndFrameMainSchedule)]
+#[system_fn(RuntimePhysicsSyncMainSchedule)]
 pub fn sync_lin_vel_to_physics(
     mut lin_vels: SystemQuery<(&RBHandle, &LinearVelocity), Changed<LinearVelocity>>,
     mut rigidbody_set: Res<RigidBodySet>,

@@ -3,42 +3,39 @@ use std::{
     collections::HashMap,
 };
 
+use engine_cache::engine_cache::EngineCache;
+
 use crate::{
     ecs::ecs_manager::EcsManager,
     physics::physics_world::PhysicsWorld,
-    rendering::{buffer_manager::buffer_manager::BufferManager, managers::RenderManagerResource},
+    rendering::{
+        buffer_manager::buffer_manager::BufferManager, managers::RenderManagerResource,
+        render_resources::RenderResourceManager,
+    },
     typed_addr::{dupe, TypedAddr},
     ENGINE_RUNTIME,
 };
 
-use self::{
-    engine_state_manager::{generic_state_manager::GenericStateManager, EngineStateManager},
-    schedule_manager::system_params::system_resource::EngineResource,
-};
+use self::schedule_manager::system_params::system_resource::EngineResource;
 
-pub mod engine_state_manager;
+pub mod engine_cache;
 pub mod schedule_manager;
 
+#[derive(Default)]
 pub struct EngineRuntime {
     pub paralellism: bool,
-    pub state: EngineStateManager,
     pub static_resource_map: HashMap<TypeId, usize>,
     pub system_locals: HashMap<&'static str, HashMap<u8, Box<dyn Any>>>,
     pub buffer_manager: BufferManager,
+    pub render_resource_manager: RenderResourceManager,
+    pub engine_cache: EngineCache,
     pub ecs: EcsManager,
     pub physics: PhysicsWorld,
-}
-
-impl Default for EngineRuntime {
-    fn default() -> Self {
-        Self::new()
-    }
 }
 
 impl EngineRuntime {
     pub fn new() -> Self {
         Self {
-            physics: PhysicsWorld::default(),
             paralellism: { false },
             /*match std::env::var("KRAJC_PARALLELISM") {
                 Ok(value) => {match value.as_str() {
@@ -48,13 +45,7 @@ impl EngineRuntime {
                 }},
                 Err(_) => true/*{true}*/,
             }*/
-            state: EngineStateManager {
-                generic: GenericStateManager::new(),
-            },
-            static_resource_map: Default::default(),
-            system_locals: Default::default(),
-            buffer_manager: BufferManager::new(),
-            ecs: EcsManager::default(),
+            ..Default::default()
         }
     }
     pub fn init() -> &'static mut Self {

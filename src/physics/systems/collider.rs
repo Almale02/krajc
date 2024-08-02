@@ -5,7 +5,7 @@ use rapier3d::{dynamics::RigidBodySet, geometry::ColliderSet};
 use crate::{
     engine_runtime::{
         schedule_manager::{
-            runtime_schedule::RuntimePostEndFrameMainSchedule,
+            runtime_schedule::RuntimePhysicsSyncMainSchedule,
             system_params::{system_query::SystemQuery, system_resource::Res},
         },
         EngineRuntime,
@@ -16,7 +16,7 @@ use crate::{
     },
 };
 
-#[system_fn(RuntimePostEndFrameMainSchedule)]
+#[system_fn(RuntimePhysicsSyncMainSchedule)]
 pub fn handle_collider_insert(
     mut inserted: SystemQuery<(Entity, &Collider, &RigidBodyHandle), Added<Collider>>,
     mut collider_set: Res<ColliderSet>,

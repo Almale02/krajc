@@ -17,35 +17,31 @@ use super::{
     super::EngineRuntime, schedule::ScheduleRunnable,
     system_params::system_resource::EngineResource,
 };
-use crate::{
-    engine_runtime::engine_state_manager::generic_state_manager::GenericStateRefTemplate,
-    implement_schedule, struct_with_default, typed_addr::TypedAddr,
-};
+use crate::{implement_schedule, struct_with_default, typed_addr::TypedAddr};
 
 pub type DepGraph = (
     Vec<(usize, std::collections::HashSet<usize>)>,
     HashMap<usize, &'static Box<dyn ScheduleRunnable>>,
 );
 
+create_schedule!(RuntimeEngineLoadSchedule, RuntimeEngineLoadData);
+
 struct_with_default!(RuntimeUpdateSchedule {
     schedule_name: String = "update".into(),
     actions: Vec<Box<dyn ScheduleRunnable>> = Vec::default(),
-    schedule_state: TypedAddr<RuntimeUpdateScheduleData> = TypedAddr::new_with_ref(RuntimeUpdateScheduleData::init()),
     dep_graph: DepGraph = DepGraph::default(),
 });
-generate_state_struct_non_resource!(RuntimeUpdateScheduleData {
-    dt: Duration = "dt" => Duration::ZERO,
-    since_start: Duration = "since_start" => Duration::ZERO,
+struct_with_default!(RuntimeUpdateScheduleData {
+    dt: Duration = Duration::ZERO,
+    since_start: Duration = Duration::ZERO,
 });
 implement_schedule!(RuntimeUpdateSchedule);
 
 create_schedule!(RuntimePostUpdateSchedule, RuntimePostUpdateData);
 
-create_schedule!(RuntimeEndFrameSchedule, RuntimeEndFrameData);
+create_schedule_main!(RuntimePhysicsSyncMainSchedule, RuntimePhysicsSyncMainData);
 
-create_schedule_main!(RuntimePostEndFrameMainSchedule, RuntimePostEndFrameMainData);
-
-create_schedule!(RuntimeEngineLoadSchedule, RuntimeEngineLoadData);
+create_schedule!(RuntimePostPhysicsSyncSchedule, RuntimePostPhysicsSyncData);
 
 pub trait IterExt {
     type T;

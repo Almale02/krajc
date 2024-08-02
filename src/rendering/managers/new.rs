@@ -1,6 +1,6 @@
 use std::ops::Deref;
 
-use cgmath::Vector3;
+use cgmath::{Vector3, Zero};
 use image::GenericImageView;
 
 use wgpu::{
@@ -12,19 +12,23 @@ use winit::window::Window;
 use crate::{
     engine_runtime::EngineRuntime,
     rendering::{
-        aspect_ratio::AspectUniform,
         buffer_manager::managed_buffer::{ManagedBufferGeneric, ManagedBufferInstanceHandle},
         builtin_materials::{
-            light_material::material::{LightMaterial, LightUniform},
+            light_material::{
+                instance_data::{LightMaterialInstance, RawLightMaterialInstance},
+                material::{LightMaterial, LightUniform},
+            },
             texture_material::{
-                instance_data::RawTextureMaterialInstance, material::TextureMaterial,
+                instance_data::{RawTextureMaterialInstance, TextureMaterialInstance},
+                material::TextureMaterial,
             },
         },
         camera::camera::{CameraController, CameraUniform, Projection},
         mesh::mesh::TextureVertex,
         texture::texture::Texture,
     },
-    InstanceBufferType, UniformBufferType,
+    typed_addr::dupe,
+    InstanceBufferType, UniformBufferType, Vec3,
 };
 
 use super::RenderManagerResource;
@@ -89,19 +93,25 @@ impl EngineRuntime {
         };
 
         let camera_uniform = CameraUniform::default();
+
         let light_uniform =
-            LightUniform::new([0., 5., 0.], [0.4, 1., 1.], Vector3::unit_x().into());
+            LightUniform::new([0., 30., 50.], [1., 1., 1.], Vector3::unit_x().into());
 
         let render_state = self.get_resource_mut::<RenderManagerResource>();
 
         render_state.device.set(device);
-        let device = &render_state.device;
+        let device = &*render_state.device;
 
-        let instance_buffer = ManagedBufferInstanceHandle::<InstanceBufferType>::new_with_size(
-            "instance_buffer".to_owned(),
-            //4092u64.pow(2),
-            268435456,
-        );
+        let texture_instance_buffer =
+            ManagedBufferInstanceHandle::<InstanceBufferType>::new_with_size(
+                "texture_instance_buffer".to_owned(),
+                1024 * 1024,
+            );
+        let light_instance_buffer =
+            ManagedBufferInstanceHandle::<InstanceBufferType>::new_with_size(
+                "light_instance_buffer".to_owned(),
+                1024 * 1024,
+            );
 
         let camera_buffer = ManagedBufferInstanceHandle::<UniformBufferType>::new_with_init(
             "camera_buffer".to_owned(),
@@ -114,7 +124,9 @@ impl EngineRuntime {
         );
         let mut texture =
             Texture::from_path("resources/image/dirt/dirt.png", &device, &queue).expect("failed");
-        texture.texture_bind_group = Some(texture.get_texture_bind_group(&device));
+        texture
+            .texture_bind_group
+            .set(texture.get_texture_bind_group(device));
 
         let surface_caps = surface.get_capabilities(&adapter);
         // Shader code in this tutorial assumes an sRGB surface texture. Using a different
@@ -131,7 +143,7 @@ impl EngineRuntime {
             format: surface_format,
             width: size.width,
             height: size.height,
-            present_mode: surface_caps.present_modes[0],
+            present_mode: PresentMode::Immediate,
             alpha_mode: surface_caps.alpha_modes[0],
             view_formats: vec![],
         };
@@ -157,7 +169,12 @@ impl EngineRuntime {
         render_state.size.set(size);
         render_state.texture.set(texture);
         render_state.depth_texture.set(depth_texture);
-        render_state.instance_buffer.set(instance_buffer);
+        render_state
+            .light_instance_buffer
+            .set(light_instance_buffer);
+        render_state
+            .texture_instance_buffer
+            .set(texture_instance_buffer);
         render_state.projection.set(projection);
         render_state.camera_controller.set(camera_controller);
         render_state.camera_uniform.set(camera_uniform);
@@ -167,16 +184,36 @@ impl EngineRuntime {
         render_state.light_uniform.set(light_uniform);
         render_state.light_buffer.set(light_buffer);
 
-        render_state.light_material.set(LightMaterial::default());
-        render_state.material.set(TextureMaterial::default());
+        render_state
+            .light_material
+            .set(LightMaterial::from_engine(dupe(self)));
+        render_state
+            .texture_material
+            .set(TextureMaterial::from_engine(dupe(self)));
 
-        dbg!(render_state.instance_buffer.get_buffer().size());
+        dbg!(render_state.light_instance_buffer.get_buffer().size());
 
         render_state
             .light_material
-            .set_instance(render_state.instance_buffer.deref().clone());
+            .set_instance(render_state.light_instance_buffer.deref().clone());
         render_state
-            .material
-            .set_instance(render_state.instance_buffer.deref().clone());
+            .texture_material
+            .set_instance(render_state.texture_instance_buffer.deref().clone());
+
+        /*#[rustfmt::skip]
+        render_state.light_material.set_instance_value(
+            vec![
+                LightMaterialInstance::new(Vec3 { x: -0.5, y: 0., z: 0.5 }, cgmath::Quaternion::zero()),
+                LightMaterialInstance::new(Vec3 { x: 0.5, y: 0., z: 0.5 }, cgmath::Quaternion::zero()),
+                LightMaterialInstance::new(Vec3 { x: -0.5, y: 0., z: -0.5 }, cgmath::Quaternion::zero()),
+                LightMaterialInstance::new(Vec3 { x: 0.5, y: 0., z: -0.5 }, cgmath::Quaternion::zero()),
+            ]
+        );
+        #[rustfmt::skip]
+        render_state.texture_material.set_instance_value(
+            vec![
+                TextureMaterialInstance::new(Vec3 { x: 0., y: 10., z: 0. }, cgmath::Quaternion::zero()),
+            ]
+        );*/
     }
 }

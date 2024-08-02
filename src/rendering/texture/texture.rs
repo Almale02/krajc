@@ -2,11 +2,13 @@ use anyhow::*;
 use image::GenericImageView;
 use wgpu::{BindGroup, BindGroupLayout};
 
+use crate::Lateinit;
+
 pub struct Texture {
     pub texture: wgpu::Texture,
     pub view: wgpu::TextureView,
     pub sampler: wgpu::Sampler,
-    pub texture_bind_group: Option<wgpu::BindGroup>,
+    pub texture_bind_group: Lateinit<wgpu::BindGroup>,
 }
 
 impl Texture {
@@ -133,7 +135,7 @@ impl Texture {
             texture,
             view,
             sampler,
-            texture_bind_group: None,
+            texture_bind_group: Lateinit::default(),
         })
     }
 }
@@ -184,7 +186,7 @@ impl Texture {
             texture,
             view,
             sampler,
-            texture_bind_group: None,
+            texture_bind_group: Lateinit::default(),
         }
     }
 }

@@ -2,6 +2,7 @@
 
 struct CameraUniform {
     view_proj: mat4x4<f32>,
+    view_pos: vec4<f32>,
 };
 struct AspectUniform{
     aspect_ratio: f32,
@@ -20,9 +21,6 @@ struct InstanceInput {
     @location(6) model_matrix_1: vec4<f32>,
     @location(7) model_matrix_2: vec4<f32>,
     @location(8) model_matrix_3: vec4<f32>,
-    @location(9) normal_matrix_0: vec3<f32>,
-    @location(10) normal_matrix_1: vec3<f32>,
-    @location(11) normal_matrix_2: vec3<f32>,
 };
 
 @group(1) @binding(0) // 1.
@@ -59,13 +57,8 @@ fn vs_main(
         instance.model_matrix_3,
     );
     // NEW!
-    let normal_matrix = mat3x3<f32>(
-        instance.normal_matrix_0,
-        instance.normal_matrix_1,
-        instance.normal_matrix_2,
-    );
     var out: VertexOutput;
-    out.uv = model.uv;
+    out.uv= model.uv;
 
     out.world_normal = (model_matrix * vec4<f32>(model.normal, 0.0)).xyz;    
     //out.world_normal = model.normal * normal_matrix;
@@ -88,7 +81,8 @@ var s_diffuse: sampler;
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let obj_color = textureSample(t_diffuse, s_diffuse, in.uv);
     
-    let light_color = vec3<f32>(1.0, 1.0, 1.0);
+    //let light_color = vec3<f32>(1.0, 1.0, 1.0);
+    let light_color = light.color.xyz;
     
 
     let ambient_strenght = 0.08;
@@ -103,13 +97,22 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     
 
     //let view_dir = normalize(camera.view_pos.xyz - in.world_position);
-    //let reflect_dir = reflect(-light_dir, in.world_normal);
+    let reflect_dir = reflect(-light_dir, in.world_normal);
 
-    //let specular_strength = pow(max(dot(view_dir, reflect_dir), 0.), 32.);
-    //let specular_color = specular_strength * light_color;
 
     
-    let result = obj_color.xyz * (diffuse_color + ambient_color);// * (ambient_color * diffuse_color);
+    let view_dir = normalize(camera.view_pos.xyz - in.world_position);
+    let half_dir = normalize(view_dir + light_dir);
+
+    
+    let specular_strength_mod = 1.8;
+    //let specular_strength = pow(max(dot(view_dir, reflect_dir), 0.), 32.) * specular_strength_mod;
+    let specular_strength = pow(max(dot(in.world_normal, half_dir), 0.0), 32.0) * specular_strength_mod;
+    let specular_color = specular_strength * light_color;
+
+    
+    let result = obj_color.xyz * (diffuse_color + ambient_color + specular_color);// * (ambient_color * diffuse_color);
+    let resulta = specular_color;
 
     return vec4<f32>(result, obj_color.a);
 }
