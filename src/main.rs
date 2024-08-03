@@ -224,7 +224,8 @@ pub async fn run() {
         let tx = thread_tx;
 
         rt.spawn(async move {
-            let futures = FuturesUnordered::new();
+            let futures: FuturesUnordered<std::pin::Pin<Box<dyn Future<Output = ()> + Send>>> =
+                FuturesUnordered::new();
             loop {
                 let tx = tx.clone();
 
