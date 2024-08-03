@@ -206,8 +206,6 @@ fn fps_logger(
     }
 }
 
-type BoxedFuture = BoxFuture<'static, ()>;
-
 pub async fn run() {
     let runtime = EngineRuntime::init();
 
@@ -224,8 +222,7 @@ pub async fn run() {
         let tx = thread_tx;
 
         rt.spawn(async move {
-            let futures: FuturesUnordered<std::pin::Pin<Box<dyn Future<Output = ()> + Send>>> =
-                FuturesUnordered::new();
+            let futures = FuturesUnordered::new();
             loop {
                 let tx = tx.clone();
 
