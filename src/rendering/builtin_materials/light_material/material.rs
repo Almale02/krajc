@@ -5,10 +5,11 @@ use bevy_ecs::{
     query::{Added, Changed, Or, With, Without},
 };
 use cgmath::Zero;
-use krajc::{system_fn, FromEngine};
+use krajc::{system_fn, EngineResource, FromEngine};
 use wgpu::{
-    Buffer, CompareFunction, DepthBiasState, DepthStencilState, Face, Features, RenderPass,
-    RenderPipeline, RenderPipelineDescriptor, ShaderModuleDescriptor, ShaderSource, StencilState,
+    BindGroupLayout, Buffer, CompareFunction, DepthBiasState, DepthStencilState, Face, Features,
+    RenderPass, RenderPipeline, RenderPipelineDescriptor, ShaderModuleDescriptor, ShaderSource,
+    StencilState,
 };
 
 use crate::{
@@ -17,7 +18,10 @@ use crate::{
         engine_cache::engine_cache::CacheHandle,
         schedule_manager::{
             runtime_schedule::{RuntimePhysicsSyncMainSchedule, RuntimePostPhysicsSyncSchedule},
-            system_params::{system_query::SystemQuery, system_resource::Res},
+            system_params::{
+                system_query::SystemQuery,
+                system_resource::{EngineResource, Res},
+            },
         },
         EngineRuntime,
     },
@@ -26,12 +30,13 @@ use crate::{
         managers::RenderManagerResource,
         material::MaterialGeneric,
         mesh::mesh::{Mesh, TextureVertex, Vertex},
+        resource_loaders::file_resource_loader::{FileResourceLoader, ShaderLoader},
         systems::general::Transform,
         texture::texture::Texture,
     },
-    span,
+    span, struct_with_default,
     typed_addr::dupe,
-    Lateinit, LightMaterialMarker, TextureMaterialMarker,
+    FromEngine, Lateinit, LightMaterialMarker, TextureMaterialMarker,
 };
 
 use super::instance_data::{LightMaterialInstance, RawLightMaterialInstance};
@@ -47,6 +52,56 @@ pub struct LightMaterial {
     light_bind_group: Lateinit<wgpu::BindGroup>,
     pipeline: CacheHandle<RenderPipeline>,
 }
+#[derive(EngineResource)]
+pub struct LightMaterialResource {
+    pub light_layout: BindGroupLayout,
+    pub camera_layout: BindGroupLayout,
+    pub render_pass: CacheHandle<RenderPipeline>,
+}
+
+impl FromEngine for LightMaterialResource {
+    fn from_engine(engine: &'static mut EngineRuntime) -> Self {
+        let render = engine.get_resource::<RenderManagerResource>();
+        Self {
+            camera_layout: {
+                render
+                    .device
+                    .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                        entries: &[wgpu::BindGroupLayoutEntry {
+                            binding: 0,
+                            visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Uniform,
+                                has_dynamic_offset: false,
+                                min_binding_size: None,
+                            },
+                            count: None,
+                        }],
+                        label: Some("camera_bind_group_layout"),
+                    })
+            },
+            light_layout: {
+                render
+                    .device
+                    .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                        entries: &[wgpu::BindGroupLayoutEntry {
+                            binding: 0,
+                            visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Uniform,
+                                has_dynamic_offset: false,
+                                min_binding_size: None,
+                            },
+                            count: None,
+                        }],
+                        label: Some("light_bind_group_layout"),
+                    })
+            },
+            render_pass: CacheHandle::from_engine(engine),
+        }
+    }
+}
+
 impl LightMaterial {
     pub fn set_mesh(&mut self, mesh: Mesh<TextureVertex>) {
         self.mesh.set(mesh);
@@ -193,42 +248,8 @@ impl MaterialGeneric for LightMaterial {
     fn setup_bind_groups(&mut self, engine: &mut EngineRuntime) {
         let render = engine.get_resource_mut::<RenderManagerResource>();
 
-        self.camera_layout
-            .set(
-                render
-                    .device
-                    .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                        entries: &[wgpu::BindGroupLayoutEntry {
-                            binding: 0,
-                            visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Uniform,
-                                has_dynamic_offset: false,
-                                min_binding_size: None,
-                            },
-                            count: None,
-                        }],
-                        label: Some("camera_bind_group_layout"),
-                    }),
-            );
-        self.light_layout
-            .set(
-                render
-                    .device
-                    .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                        entries: &[wgpu::BindGroupLayoutEntry {
-                            binding: 0,
-                            visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Uniform,
-                                has_dynamic_offset: false,
-                                min_binding_size: None,
-                            },
-                            count: None,
-                        }],
-                        label: Some("light_bind_group_layout"),
-                    }),
-            );
+        self.camera_layout.set();
+        self.light_layout.set();
 
         self.camera_bind_group
             .set(render.device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -245,7 +266,6 @@ impl MaterialGeneric for LightMaterial {
                 layout: &self.light_layout,
                 entries: &[wgpu::BindGroupEntry {
                     binding: 0,
-                    //resource: camera_buffer.get_buffer().as_entire_binding(),
                     resource: render.light_buffer.get_buffer().as_entire_binding(),
                 }],
                 label: Some("light_bind_group"),

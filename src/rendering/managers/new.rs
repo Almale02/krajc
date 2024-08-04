@@ -25,6 +25,7 @@ use crate::{
         },
         camera::camera::{CameraController, CameraUniform, Projection},
         mesh::mesh::TextureVertex,
+        resource_loaders::file_resource_loader::{FileResourceLoader, RawFileLoader},
         texture::texture::Texture,
     },
     typed_addr::dupe,
@@ -123,7 +124,8 @@ impl EngineRuntime {
             light_uniform,
         );
         let mut texture =
-            Texture::from_path("resources/image/dirt/dirt.png", &device, &queue).expect("failed");
+            Texture::from_path("resources/image/dirt/dirt.png", device, &queue).expect("failed");
+
         texture
             .texture_bind_group
             .set(texture.get_texture_bind_group(device));

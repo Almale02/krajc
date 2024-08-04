@@ -7,6 +7,7 @@ pub mod mesh;
 pub mod render_command;
 pub mod render_entity;
 pub mod render_resources;
+pub mod resource_loaders;
 pub mod systems;
 pub mod texture;
 

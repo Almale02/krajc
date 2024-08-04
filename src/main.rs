@@ -14,7 +14,7 @@ use bevy_ecs::{component::Component, query::With};
 use futures::{
     future::{join_all, BoxFuture},
     stream::{FuturesOrdered, FuturesUnordered},
-    FutureExt,
+    FutureExt, StreamExt,
 };
 use krajc::system_fn;
 use physics::{
@@ -43,10 +43,10 @@ use std::{
     hash::Hash,
     ops::{Deref, DerefMut},
     rc::Rc,
-    time::Instant,
+    time::{Duration, Instant},
 };
 
-use cgmath::{Deg, Point3, Rad, Vector3};
+use cgmath::{num_traits::Signed, Deg, Point3, Rad, Vector3};
 
 use rapier3d::na::Vector3 as NaVec3;
 
@@ -62,24 +62,17 @@ use engine_runtime::{
             system_query::{EcsWorld, SystemQuery},
             system_resource::Res,
         },
-    },
-    EngineRuntime,
+    }, target_fps::TargetFps, EngineRuntime
 };
 
 use ordered_float::OrderedFloat;
 use rendering::{
-    buffer_manager::{managed_buffer::ManagedBufferGeneric, InstanceBufferType, UniformBufferType},
-    builtin_materials::{
+    buffer_manager::{managed_buffer::ManagedBufferGeneric, InstanceBufferType, UniformBufferType}, builtin_materials::{
         light_material::material::update_light_material,
         texture_material::material::update_texture_material,
-    },
-    camera::camera::Camera,
-    managers::RenderManagerResource,
-    mesh::mesh::{Mesh, TextureVertexTemplates},
-    render_resources::ResourceLoader,
-    systems::general::{
+    }, camera::camera::Camera, managers::RenderManagerResource, mesh::mesh::{Mesh, TextureVertexTemplates}, render_resources::{ResourceHandle, ResourceLoader}, resource_loaders::file_resource_loader::{FileResourceLoader, RawFileLoader, ShaderLoader}, systems::general::{
         make_light_follow_camera, move_stuff_up, sync_light, Color, Light, Transform,
-    },
+    }
 };
 
 use wgpu::{BufferUsages, SurfaceError};
@@ -100,8 +93,9 @@ pub mod typed_addr;
 #[global_allocator]
 static ALLOC: GlobalAllocatorSampled = GlobalAllocatorSampled::new(100);*/
 
-fn main() {
-    pollster::block_on(run());
+#[tokio::main]
+async fn main() {
+    run().await
 }
 
 #[derive(Component)]
@@ -111,14 +105,16 @@ pub struct TextureMaterialMarker;
 pub struct LightMaterialMarker;
 
 #[system_fn(RuntimeEngineLoadSchedule)]
-fn startup(mut world: EcsWorld, mut render: Res<RenderManagerResource>, mut gravity: Res<Gravity>) {
+fn startup(mut world: EcsWorld, mut render: Res<RenderManagerResource>, mut gravity: Res<Gravity>, mut target_fps: Res<TargetFps>) {
+
+    target_fps.0 = 90.;
     gravity.0 = NaVec3::new(0.04, -0.5, 0.);
     dbg!("ran startup");
     //let mut entities = vec![];
 
     //gravity.0 = NaVec3::new(0., -2., 0.);
 
-    let stack = 2;
+    let stack = 1;
     let width = 32;
     let height = 32;
 
@@ -192,13 +188,7 @@ fn startup(mut world: EcsWorld, mut render: Res<RenderManagerResource>, mut grav
 }
 
 #[system_fn(RuntimeUpdateSchedule)]
-fn fps_logger(
-    update: Res<RuntimeUpdateScheduleData>,
-    mut prev_full_sec: Local<u64>,
-    mut render_state: Res<RenderManagerResource>,
-) {
-    let render_state = render_state.get_static_mut();
-
+fn fps_logger(update: Res<RuntimeUpdateScheduleData>, mut prev_full_sec: Local<u64>) {
     if *prev_full_sec != update.since_start.as_secs_f64() as u64 {
         dbg!(1. / update.dt.as_secs_f64());
         *prev_full_sec = update.since_start.as_secs_f64() as u64;
@@ -221,28 +211,32 @@ pub async fn run() {
         let rx = thread_rx;
         let tx = thread_tx;
 
-        rt.spawn(async move {
-            let futures = FuturesUnordered::new();
+        rt.block_on(async move {
+            let mut futures = FuturesUnordered::new();
             loop {
-                let tx = tx.clone();
-
-                match rx.recv() {
-                    Ok((uuid, mut loader)) => {
+                tokio::select! {
+                   Ok((uuid, loader)) = rx.recv_async().fuse() => {
                         let future = async move {
-                            let result: Box<dyn Any + Send> = loader.start_loading().await;
-
-                            tx.send((uuid, result)).unwrap();
+                            (uuid, loader.await)
                         }
                         .boxed();
                         futures.push(future);
-                    }
-                    Err(_) => continue,
-                }
+                        continue;
+                    },
+                    Some((uuid, resource)) = futures.next().fuse() => {
+                        tx.send((uuid, resource)).unwrap();
+                        continue;
+                
+                    },
+                    else => {}
+                };
+                
             }
         });
     });
 
     runtime.buffer_manager.engine = unsafe { ENGINE_RUNTIME.get() };
+    runtime.render_resource_manager.engine.set( unsafe { ENGINE_RUNTIME.get() });
     dupe(runtime)
         .buffer_manager
         .register_new_buffer_type::<UniformBufferType>();
@@ -304,19 +298,21 @@ pub async fn run() {
 
     //render_states.material.register_systems(runtime);
 
+
     event_loop.run(move |event, _window_target, control_flow| {
         span!(trace_loop, "event loop");
 
         match event {
             Event::NewEvents(StartCause::Poll) => {
-                let now = Instant::now();
-                let dt = now - last_render_time;
+                let frame_start = Instant::now();
+                let dt = frame_start - last_render_time;
 
-
+                runtime.render_resource_manager.update();
+                
                 runtime.update(dt, start);
-                last_render_time = now;
+                last_render_time = frame_start;
                 //dbg!(1. / dt.as_secs_f32());
-                let since_start = now - start;
+                let since_start = frame_start - start;
                 let since_start = since_start.as_secs_f32();
                 if prev_full_sec != since_start as u64 {
                     //println!("fps: {}", 1. / dt.as_secs_f32());
@@ -332,6 +328,19 @@ pub async fn run() {
                 }
                 drop_span!(trace_render);
 
+                let target_fps = runtime.get_resource::<TargetFps>();
+
+                // added 10 to it because it looks like atleaset on my computer that it slows it too much down by around 10 fps
+                let target_frame_time = 1. / (target_fps.0 + 10.);
+
+                let current_frame_time = frame_start.elapsed().as_secs_f32();
+
+                let diff = target_frame_time - current_frame_time;
+
+                if diff.is_positive() {
+                    spin_sleep::sleep(Duration::from_secs_f32(diff));
+                }
+
                 #[cfg(not(feature = "prod"))]
                 tracing_tracy::client::frame_mark();
             }
@@ -340,6 +349,25 @@ pub async fn run() {
                 .. // We're not using device_id currently
             } => {
                 render.get().camera_controller.deref_mut().process_mouse(delta.0, delta.1);
+
+                let shader_res =runtime
+                    .render_resource_manager
+                    .load_resource(FileResourceLoader::<ShaderLoader>::new(
+                        "resources/shaders/shader_light.wgsl"
+                    
+                    ));
+                let res_handle = runtime
+                    .render_resource_manager
+                    .load_resource(FileResourceLoader::<RawFileLoader>::new(
+                        "resources/image/dirt/dirt.png",
+                    ));
+                let res_handle = runtime
+                    .render_resource_manager
+                    .load_resource(FileResourceLoader::<RawFileLoader>::new(
+                        "resources/image/dirt/dirt.png",
+                    ));
+                
+
             }
 
             /*Event::MainEventsCleared => {
@@ -579,13 +607,17 @@ macro_rules! struct_with_default {
 
     };
 }
+#[derive(Debug)]
 enum LateinitEnum<T> {
     Some(T),
     Uninited,
 }
+#[derive(Debug)]
 pub struct Lateinit<T> {
     value: LateinitEnum<T>,
 }
+unsafe impl<T> Send for Lateinit<T> {}
+
 impl<T> Lateinit<T> {
     fn set(&mut self, value: T) {
         self.value = LateinitEnum::<T>::Some(value);

@@ -20,6 +20,7 @@ use self::schedule_manager::system_params::system_resource::EngineResource;
 
 pub mod engine_cache;
 pub mod schedule_manager;
+pub mod target_fps;
 
 #[derive(Default)]
 pub struct EngineRuntime {

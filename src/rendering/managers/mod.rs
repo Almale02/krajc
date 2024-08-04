@@ -13,6 +13,7 @@ use super::{
         texture_material::material::TextureMaterial,
     },
     camera::camera::{CameraController, CameraUniform, Projection},
+    draw_pass::DrawPass,
     texture::texture::Texture,
 };
 
@@ -24,6 +25,9 @@ pub mod update;
 pub mod window;
 
 type S = &'static str;
+
+#[derive(Default, krajc::EngineResource)]
+pub struct TargetFps(pub f32);
 
 #[derive(Default, EngineResource)]
 pub struct RenderManagerResource {
@@ -55,6 +59,8 @@ pub struct RenderManagerResource {
 
     pub texture_material: Lateinit<TextureMaterial>,
     pub light_material: Lateinit<LightMaterial>,
+
+    pub draw_passes: Vec<DrawPass>,
 }
 impl Clone for RenderManagerResource {
     fn clone(&self) -> Self {

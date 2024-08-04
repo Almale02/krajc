@@ -228,7 +228,7 @@ fn impl_res(ast: &syn::DeriveInput) -> TokenStream {
                 match op {
                     Some(val) => *val,
                     None => {
-                        let new = Box::leak(Box::new(#name::default()));
+                        let new = Box::leak(Box::new(#name::from_engine(dupe(engine))));
                         let addr = crate::TypedAddr::new_with_ref(new).addr;
                         engine.static_resource_map.insert(std::any::TypeId::of::<Self>(), addr);
                         addr
@@ -243,7 +243,7 @@ fn impl_res(ast: &syn::DeriveInput) -> TokenStream {
                 match op {
                     Some(val) => *val,
                     None => {
-                        let new = Box::leak(Box::new(#name::default()));
+                        let new = Box::leak(Box::new(#name::from_engine(dupe(engine))));
                         let addr = crate::TypedAddr::new_with_ref(new).addr;
                         engine.static_resource_map.insert(std::any::TypeId::of::<Self>(), addr);
                         addr
