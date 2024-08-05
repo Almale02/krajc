@@ -12,6 +12,7 @@ use winit::window::Window;
 use crate::{
     engine_runtime::EngineRuntime,
     rendering::{
+        asset_loaders::file_resource_loader::{FileResourceLoader, RawFileLoader},
         buffer_manager::managed_buffer::{ManagedBufferGeneric, ManagedBufferInstanceHandle},
         builtin_materials::{
             light_material::{
@@ -25,7 +26,6 @@ use crate::{
         },
         camera::camera::{CameraController, CameraUniform, Projection},
         mesh::mesh::TextureVertex,
-        resource_loaders::file_resource_loader::{FileResourceLoader, RawFileLoader},
         texture::texture::Texture,
     },
     typed_addr::dupe,
@@ -201,21 +201,5 @@ impl EngineRuntime {
         render_state
             .texture_material
             .set_instance(render_state.texture_instance_buffer.deref().clone());
-
-        /*#[rustfmt::skip]
-        render_state.light_material.set_instance_value(
-            vec![
-                LightMaterialInstance::new(Vec3 { x: -0.5, y: 0., z: 0.5 }, cgmath::Quaternion::zero()),
-                LightMaterialInstance::new(Vec3 { x: 0.5, y: 0., z: 0.5 }, cgmath::Quaternion::zero()),
-                LightMaterialInstance::new(Vec3 { x: -0.5, y: 0., z: -0.5 }, cgmath::Quaternion::zero()),
-                LightMaterialInstance::new(Vec3 { x: 0.5, y: 0., z: -0.5 }, cgmath::Quaternion::zero()),
-            ]
-        );
-        #[rustfmt::skip]
-        render_state.texture_material.set_instance_value(
-            vec![
-                TextureMaterialInstance::new(Vec3 { x: 0., y: 10., z: 0. }, cgmath::Quaternion::zero()),
-            ]
-        );*/
     }
 }

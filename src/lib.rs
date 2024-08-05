@@ -215,6 +215,7 @@ pub fn res_derive(input: TokenStream) -> TokenStream {
 fn impl_res(ast: &syn::DeriveInput) -> TokenStream {
     let name = &ast.ident;
     let gen = quote! {
+    use crate::FromEngine as _;
 
     /*use crate::EngineRuntime;
     use crate::TypedAddr;
@@ -228,7 +229,7 @@ fn impl_res(ast: &syn::DeriveInput) -> TokenStream {
                 match op {
                     Some(val) => *val,
                     None => {
-                        let new = Box::leak(Box::new(#name::from_engine(dupe(engine))));
+                        let new = Box::leak(Box::new(#name::from_engine(crate::dupe(engine))));
                         let addr = crate::TypedAddr::new_with_ref(new).addr;
                         engine.static_resource_map.insert(std::any::TypeId::of::<Self>(), addr);
                         addr
@@ -243,7 +244,7 @@ fn impl_res(ast: &syn::DeriveInput) -> TokenStream {
                 match op {
                     Some(val) => *val,
                     None => {
-                        let new = Box::leak(Box::new(#name::from_engine(dupe(engine))));
+                        let new = Box::leak(Box::new(#name::from_engine(crate::dupe(engine))));
                         let addr = crate::TypedAddr::new_with_ref(new).addr;
                         engine.static_resource_map.insert(std::any::TypeId::of::<Self>(), addr);
                         addr

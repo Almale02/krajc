@@ -2,8 +2,8 @@ use crate::engine_runtime::EngineRuntime;
 use crate::rendering::managers::RenderManagerResource;
 use crate::typed_addr::dupe;
 use crate::typed_addr::TypedAddr;
+use crate::AssetLoader;
 use crate::Lateinit;
-use crate::ResourceLoader;
 use futures::future::BoxFuture;
 use futures::task::Context;
 use futures::task::Poll;
@@ -36,7 +36,7 @@ impl<T: FileLoadable + 'static + Future<Output = Box<dyn Any + Send>> + Send + U
     }
 }
 
-impl<T: FileLoadable + Future<Output = Box<dyn Any + Send>> + Send + Unpin + 'static> ResourceLoader
+impl<T: FileLoadable + Future<Output = Box<dyn Any + Send>> + Send + Unpin + 'static> AssetLoader
     for FileResourceLoader<T>
 {
     fn set_engine(&mut self, engine: &'static mut crate::engine_runtime::EngineRuntime) {

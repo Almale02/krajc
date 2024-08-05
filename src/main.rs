@@ -7,10 +7,10 @@
 #![allow(clippy::type_complexity)]
 
 use crate::rendering::systems::general::update_rendering;
-use bevy_ecs::{component::Component, query::With};
 
 //pub type QueryFilter<A, B = Passthrough> = EntityFilterTuple<A, B>;
 
+use bevy_ecs::component::Component;
 use futures::{
     future::{join_all, BoxFuture},
     stream::{FuturesOrdered, FuturesUnordered},
@@ -70,7 +70,7 @@ use rendering::{
     buffer_manager::{managed_buffer::ManagedBufferGeneric, InstanceBufferType, UniformBufferType}, builtin_materials::{
         light_material::material::update_light_material,
         texture_material::material::update_texture_material,
-    }, camera::camera::Camera, managers::RenderManagerResource, mesh::mesh::{Mesh, TextureVertexTemplates}, render_resources::{ResourceHandle, ResourceLoader}, resource_loaders::file_resource_loader::{FileResourceLoader, RawFileLoader, ShaderLoader}, systems::general::{
+    }, camera::camera::Camera, managers::RenderManagerResource, mesh::mesh::{Mesh, TextureVertexTemplates}, asset::{AssetHandle, AssetLoader}, asset_loaders::file_resource_loader::{FileResourceLoader, RawFileLoader, ShaderLoader}, systems::general::{
         make_light_follow_camera, move_stuff_up, sync_light, Color, Light, Transform,
     }
 };
@@ -199,7 +199,7 @@ fn fps_logger(update: Res<RuntimeUpdateScheduleData>, mut prev_full_sec: Local<u
 pub async fn run() {
     let runtime = EngineRuntime::init();
 
-    let thread_rx: flume::Receiver<(Uuid, Box<dyn ResourceLoader>)> =
+    let thread_rx: flume::Receiver<(Uuid, Box<dyn AssetLoader>)> =
         runtime.render_resource_manager.thread_rx.clone();
     let thread_tx: flume::Sender<(Uuid, Box<dyn Any + Send>)> =
         runtime.render_resource_manager.thread_tx.clone();

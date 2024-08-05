@@ -1,3 +1,4 @@
+use crate::dupe;
 use crate::engine_runtime::EngineResource;
 
 #[derive(Default, krajc::EngineResource)]

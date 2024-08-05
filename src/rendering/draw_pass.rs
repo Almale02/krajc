@@ -3,13 +3,13 @@ use wgpu::{IndexFormat, RenderPass};
 use crate::{engine_runtime::EngineRuntime, typed_addr::dupe};
 
 use super::{
+    asset::{AssetHandle, AssetHandleUntype},
     material::MaterialGeneric,
-    render_resources::{ResourceHandle, ResourceHandleUntype},
 };
 
 pub struct DrawPass {
     pub mat: Box<dyn MaterialGeneric>,
-    pub res_handles: Vec<ResourceHandleUntype>,
+    pub res_handles: Vec<AssetHandleUntype>,
 }
 impl DrawPass {
     pub fn is_loaded(&self) -> bool {

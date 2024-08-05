@@ -26,11 +26,11 @@ use crate::{
         EngineRuntime,
     },
     rendering::{
+        asset_loaders::file_resource_loader::{FileResourceLoader, ShaderLoader},
         buffer_manager::{managed_buffer::ManagedBufferInstanceHandle, InstanceBufferType},
         managers::RenderManagerResource,
         material::MaterialGeneric,
         mesh::mesh::{Mesh, TextureVertex, Vertex},
-        resource_loaders::file_resource_loader::{FileResourceLoader, ShaderLoader},
         systems::general::Transform,
         texture::texture::Texture,
     },
@@ -46,17 +46,16 @@ pub struct LightMaterial {
     pub instance_count: u32,
     mesh: Lateinit<Mesh<TextureVertex>>,
     instance_buffer: Lateinit<ManagedBufferInstanceHandle<InstanceBufferType>>,
-    camera_layout: Lateinit<wgpu::BindGroupLayout>,
+    camera_layout: Lateinit<&'static wgpu::BindGroupLayout>,
     camera_bind_group: Lateinit<wgpu::BindGroup>,
-    light_layout: Lateinit<wgpu::BindGroupLayout>,
+    light_layout: Lateinit<&'static wgpu::BindGroupLayout>,
     light_bind_group: Lateinit<wgpu::BindGroup>,
-    pipeline: CacheHandle<RenderPipeline>,
 }
 #[derive(EngineResource)]
 pub struct LightMaterialResource {
     pub light_layout: BindGroupLayout,
     pub camera_layout: BindGroupLayout,
-    pub render_pass: CacheHandle<RenderPipeline>,
+    pub pipeline: CacheHandle<RenderPipeline>,
 }
 
 impl FromEngine for LightMaterialResource {
@@ -97,7 +96,7 @@ impl FromEngine for LightMaterialResource {
                         label: Some("light_bind_group_layout"),
                     })
             },
-            render_pass: CacheHandle::from_engine(engine),
+            pipeline: CacheHandle::from_engine(engine),
         }
     }
 }
@@ -162,7 +161,8 @@ impl MaterialGeneric for LightMaterial {
         0..self.instance_count
     }
     fn render_pipeline(&mut self, engine: &mut EngineRuntime) -> &RenderPipeline {
-        self.pipeline.cache(|| {
+        let light_res = engine.get_resource_mut::<LightMaterialResource>();
+        light_res.pipeline.cache(|| {
             let render = engine.get_resource_mut::<RenderManagerResource>();
 
             span!(trace_reading_shader, "reading shader");
@@ -247,9 +247,10 @@ impl MaterialGeneric for LightMaterial {
     }
     fn setup_bind_groups(&mut self, engine: &mut EngineRuntime) {
         let render = engine.get_resource_mut::<RenderManagerResource>();
+        let light_res = engine.get_resource::<LightMaterialResource>();
 
-        self.camera_layout.set();
-        self.light_layout.set();
+        self.camera_layout.set(&light_res.camera_layout);
+        self.light_layout.set(&light_res.light_layout);
 
         self.camera_bind_group
             .set(render.device.create_bind_group(&wgpu::BindGroupDescriptor {

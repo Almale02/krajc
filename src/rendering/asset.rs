@@ -4,6 +4,7 @@ use std::{
     collections::HashMap,
     marker::{PhantomData, Send},
     pin::Pin,
+    sync::Arc,
     task::{Context, Poll},
 };
 
@@ -13,59 +14,65 @@ use uuid::Uuid;
 
 use crate::{engine_runtime::EngineRuntime, typed_addr::dupe, Lateinit};
 
-pub struct RenderResourceManager {
+pub struct AssetManager {
     pub engine: Lateinit<&'static mut EngineRuntime>,
-    pub resources: HashMap<Uuid, Box<dyn Any + Send>>,
-    pub main_tx: flume::Sender<(Uuid, Box<dyn ResourceLoader<Output = Box<dyn Any + Send>>>)>,
-    pub thread_rx: flume::Receiver<(Uuid, Box<dyn ResourceLoader<Output = Box<dyn Any + Send>>>)>,
-    pub main_rx: flume::Receiver<(Uuid, Box<dyn Any + Send>)>,
-    pub thread_tx: flume::Sender<(Uuid, Box<dyn Any + Send>)>,
+    pub assets: HashMap<Uuid, Arc<Box<dyn Any + Send>>>,
+    pub main_tx: flume::Sender<(
+        Arc<Box<dyn Any + Send>>,
+        Box<dyn AssetLoader<Output = Box<dyn Any + Send>>>,
+    )>,
+    pub thread_rx: flume::Receiver<(
+        Arc<Box<dyn Any + Send>>,
+        Box<dyn AssetLoader<Output = Box<dyn Any + Send>>>,
+    )>,
+    //pub main_rx: flume::Receiver<(Uuid, Box<dyn Any + Send>)>,
+    //pub thread_tx: flume::Sender<(Uuid, Box<dyn Any + Send>)>,
 }
 
-impl RenderResourceManager {
+impl AssetManager {
     pub fn new() -> Self {
         let (main_tx, thread_rx) = flume::unbounded();
-        let (thread_tx, main_rx) = flume::unbounded();
+        //let (thread_tx, main_rx) = flume::unbounded();
         Self {
             engine: Lateinit::default(),
-            resources: HashMap::default(),
+            assets: HashMap::default(),
             main_tx,
             thread_rx,
-            main_rx,
-            thread_tx,
+            //main_rx,
+            //thread_tx,
         }
     }
 
-    pub fn load_resource<T: ResourceLoader<Output = Box<dyn Any + Send>> + 'static>(
+    pub fn load_resource<T: AssetLoader<Output = Box<dyn Any + Send>> + 'static>(
         &mut self,
         mut loader: T,
-    ) -> ResourceHandle<T> {
+    ) -> AssetHandle<T> {
         let uuid = Uuid::new_v4();
         loader.set_engine(*dupe(self).engine);
 
-        self.main_tx.send((uuid, Box::new(loader))).unwrap();
+        self.assets.insert(uuid, Arc::new(Box::new(0_u8)));
+        let asset_ref = self.assets.get(&uuid).unwrap();
 
-        ResourceHandle::new(uuid, dupe(self))
-    }
-    pub fn update(&mut self) {
-        while let Ok((uuid, res)) = self.main_rx.try_recv() {
-            self.resources.insert(uuid, res);
-        }
+        self.main_tx
+            .send((Arc::clone(asset_ref), Box::new(loader)))
+            .unwrap();
+
+        AssetHandle::new(uuid, dupe(self))
     }
 }
 
-impl Default for RenderResourceManager {
+impl Default for AssetManager {
     fn default() -> Self {
         Self::new()
     }
 }
-pub struct ResourceHandle<T> {
+pub struct AssetHandle<T> {
     uuid: Uuid,
-    manager: &'static mut RenderResourceManager,
+    manager: &'static mut AssetManager,
     _p: PhantomData<T>,
 }
 
-impl<T> Clone for ResourceHandle<T> {
+impl<T> Clone for AssetHandle<T> {
     fn clone(&self) -> Self {
         Self {
             uuid: self.uuid,
@@ -75,8 +82,8 @@ impl<T> Clone for ResourceHandle<T> {
     }
 }
 
-impl<T> ResourceHandle<T> {
-    pub fn new(uuid: Uuid, manager: &'static mut RenderResourceManager) -> Self {
+impl<T> AssetHandle<T> {
+    pub fn new(uuid: Uuid, manager: &'static mut AssetManager) -> Self {
         Self {
             uuid,
             manager,
@@ -84,12 +91,12 @@ impl<T> ResourceHandle<T> {
         }
     }
     pub fn is_loaded(&self) -> bool {
-        self.manager.resources.contains_key(&self.uuid)
+        self.manager.assets.contains_key(&self.uuid)
     }
     pub fn get(&self) -> &'static T {
         dupe(self)
             .manager
-            .resources
+            .assets
             .get(&self.uuid)
             .unwrap()
             .downcast_ref()
@@ -105,7 +112,7 @@ impl<T> ResourceHandle<T> {
     pub fn get_mut(&self) -> &'static mut T {
         dupe(self)
             .manager
-            .resources
+            .assets
             .get_mut(&self.uuid)
             .unwrap()
             .downcast_mut()
@@ -119,7 +126,7 @@ impl<T> ResourceHandle<T> {
     }
 }
 
-impl<T> Future for ResourceHandle<T> {
+impl<T> Future for AssetHandle<T> {
     type Output = ();
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -133,12 +140,12 @@ impl<T> Future for ResourceHandle<T> {
     }
 }
 
-pub struct ResourceHandleUntype {
+pub struct AssetHandleUntype {
     uuid: Uuid,
-    manager: &'static mut RenderResourceManager,
+    manager: &'static mut AssetManager,
 }
 
-impl Clone for ResourceHandleUntype {
+impl Clone for AssetHandleUntype {
     fn clone(&self) -> Self {
         Self {
             uuid: self.uuid,
@@ -147,15 +154,15 @@ impl Clone for ResourceHandleUntype {
     }
 }
 
-impl ResourceHandleUntype {
-    pub fn new(uuid: Uuid, manager: &'static mut RenderResourceManager) -> Self {
+impl AssetHandleUntype {
+    pub fn new(uuid: Uuid, manager: &'static mut AssetManager) -> Self {
         Self { uuid, manager }
     }
     pub fn is_loaded(&self) -> bool {
-        self.manager.resources.contains_key(&self.uuid)
+        self.manager.assets.contains_key(&self.uuid)
     }
 }
 
-pub trait ResourceLoader: Unpin + Send + Future<Output = Box<dyn Any + Send>> {
+pub trait AssetLoader: Unpin + Send + Future<Output = Box<dyn Any + Send>> {
     fn set_engine(&mut self, engine: &'static mut EngineRuntime);
 }
