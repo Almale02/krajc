@@ -39,7 +39,7 @@ tokio = { version = "1.39.2", features = ["fs", "full", "io-std", "io-util", "rt
 futures = "0.3.30"
 async-trait = "0.1.81"
 spin_sleep = "1.2.0"
-async-std = "1.12.0"
+async-lock = "3.4.0"
 
 [build-dependencies]
 clippy = "0.0.302"

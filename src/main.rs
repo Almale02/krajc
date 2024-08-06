@@ -25,6 +25,7 @@ use physics::{
     systems::rigid_body::physics_systems,
     Gravity,
 };
+use pollster::FutureExt as _;
 use rapier3d::{
     dynamics::{RigidBodySet, RigidBodyType},
     geometry::ColliderShape,
@@ -32,6 +33,7 @@ use rapier3d::{
     na::{Isometry3, UnitQuaternion, Vector3 as Vector},
 };
 
+use tokio::sync::RwLockWriteGuard;
 use tracing_tracy::client::SpanLocation;
 use typed_addr::{dupe, TypedAddr};
 use uuid::Uuid;
@@ -67,16 +69,16 @@ use engine_runtime::{
 
 use ordered_float::OrderedFloat;
 use rendering::{
-    buffer_manager::{managed_buffer::ManagedBufferGeneric, InstanceBufferType, UniformBufferType}, builtin_materials::{
+    asset::{AssetEntrie, AssetHandle, AssetLoader}, asset_loaders::file_resource_loader::{FileResourceLoader, RawFileLoader, ShaderLoader}, buffer_manager::{managed_buffer::ManagedBufferGeneric, InstanceBufferType, UniformBufferType}, builtin_materials::{
         light_material::material::update_light_material,
         texture_material::material::update_texture_material,
-    }, camera::camera::Camera, managers::RenderManagerResource, mesh::mesh::{Mesh, TextureVertexTemplates}, asset::{AssetHandle, AssetLoader}, asset_loaders::file_resource_loader::{FileResourceLoader, RawFileLoader, ShaderLoader}, systems::general::{
+    }, camera::camera::Camera, managers::RenderManagerResource, mesh::mesh::{Mesh, TextureVertexTemplates}, systems::general::{
         make_light_follow_camera, move_stuff_up, sync_light, Color, Light, Transform,
     }
 };
 
 use wgpu::{BufferUsages, SurfaceError};
-use winit::{dpi::PhysicalSize, event::*, event_loop::EventLoop, window::WindowBuilder};
+use winit::{dpi::PhysicalSize, event::*, event_loop::{ControlFlow, EventLoop}, window::WindowBuilder};
 
 use crate::engine_runtime::schedule_manager::runtime_schedule::RuntimeEngineLoadSchedule;
 
@@ -199,39 +201,32 @@ fn fps_logger(update: Res<RuntimeUpdateScheduleData>, mut prev_full_sec: Local<u
 pub async fn run() {
     let runtime = EngineRuntime::init();
 
-    let thread_rx: flume::Receiver<(Uuid, Box<dyn AssetLoader>)> =
+    let thread_rx: flume::Receiver<(&'static std::sync::Arc<tokio::sync::RwLock<AssetEntrie>>, Box<dyn AssetLoader<Output = Box<dyn Any + Send>>>)> =
         runtime.render_resource_manager.thread_rx.clone();
-    let thread_tx: flume::Sender<(Uuid, Box<dyn Any + Send>)> =
-        runtime.render_resource_manager.thread_tx.clone();
-    std::thread::spawn(move || {
+    let handle = std::thread::spawn(move || {
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
             .unwrap();
         let rx = thread_rx;
-        let tx = thread_tx;
 
         rt.block_on(async move {
             let mut futures = FuturesUnordered::new();
             loop {
                 tokio::select! {
-                   Ok((uuid, loader)) = rx.recv_async().fuse() => {
+                    Ok((lock, loader)) = rx.recv_async() => {
                         let future = async move {
-                            (uuid, loader.await)
-                        }
-                        .boxed();
+                            let res = loader.await;
+                            let mut unlock = lock.write().await;
+                            unlock.asset = Some(res);
+                            unlock.loaded = true; // Ensure loaded is set to true
+                        }.boxed();
                         futures.push(future);
-                        continue;
                     },
-                    Some((uuid, resource)) = futures.next().fuse() => {
-                        tx.send((uuid, resource)).unwrap();
-                        continue;
-                
-                    },
-                    else => {}
+                    Some(_) = futures.next() => {},
                 };
-                
             }
+            
         });
     });
 
@@ -298,8 +293,16 @@ pub async fn run() {
 
     //render_states.material.register_systems(runtime);
 
+    
+    let shader_res = runtime
+        .render_resource_manager
+        .load_resource(FileResourceLoader::<ShaderLoader>::new(
+            "resources/shaders/shader_light.wgsl"
+        
+        ));
+    dbg!(shader_res.await.is_loaded().await);
 
-    event_loop.run(move |event, _window_target, control_flow| {
+    event_loop.run(move |event, _window_target, control_flow: &mut ControlFlow| {
         span!(trace_loop, "event loop");
 
         match event {
@@ -307,7 +310,10 @@ pub async fn run() {
                 let frame_start = Instant::now();
                 let dt = frame_start - last_render_time;
 
-                runtime.render_resource_manager.update();
+                //dbg!(shader_res.try_is_loaded().unwrap());
+
+                //dbg!(shader_res.try_is_loaded().unwrap());
+
                 
                 runtime.update(dt, start);
                 last_render_time = frame_start;
@@ -350,22 +356,6 @@ pub async fn run() {
             } => {
                 render.get().camera_controller.deref_mut().process_mouse(delta.0, delta.1);
 
-                let shader_res =runtime
-                    .render_resource_manager
-                    .load_resource(FileResourceLoader::<ShaderLoader>::new(
-                        "resources/shaders/shader_light.wgsl"
-                    
-                    ));
-                let res_handle = runtime
-                    .render_resource_manager
-                    .load_resource(FileResourceLoader::<RawFileLoader>::new(
-                        "resources/image/dirt/dirt.png",
-                    ));
-                let res_handle = runtime
-                    .render_resource_manager
-                    .load_resource(FileResourceLoader::<RawFileLoader>::new(
-                        "resources/image/dirt/dirt.png",
-                    ));
                 
 
             }
@@ -396,9 +386,9 @@ pub async fn run() {
                 }
             }
             _ => {}
-        }
-    });
-}
+        };
+    }
+)}
 
 mod key_macros {
     #[macro_export]
@@ -637,6 +627,12 @@ impl<T> Lateinit<T> {
     const fn default_const() -> Self {
         Lateinit {
             value: LateinitEnum::Uninited,
+        }
+    }
+    fn consume(self) -> T {
+        match self.value {
+            LateinitEnum::Some(x) => x,
+            LateinitEnum::Uninited => panic!("attempted to consume an uninited Lateinit"),
         }
     }
 }

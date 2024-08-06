@@ -9,24 +9,60 @@ use std::{
 };
 
 use futures::{future::BoxFuture, Future, FutureExt};
-use tokio::fs;
+use tokio::{
+    fs,
+    sync::{RwLock, RwLockMappedWriteGuard, RwLockReadGuard, RwLockWriteGuard, TryLockError},
+};
 use uuid::Uuid;
 
 use crate::{engine_runtime::EngineRuntime, typed_addr::dupe, Lateinit};
 
 pub struct AssetManager {
     pub engine: Lateinit<&'static mut EngineRuntime>,
-    pub assets: HashMap<Uuid, Arc<Box<dyn Any + Send>>>,
+    pub assets: HashMap<Uuid, Arc<RwLock<AssetEntrie>>>,
     pub main_tx: flume::Sender<(
-        Arc<Box<dyn Any + Send>>,
+        &'static Arc<RwLock<AssetEntrie>>,
         Box<dyn AssetLoader<Output = Box<dyn Any + Send>>>,
     )>,
     pub thread_rx: flume::Receiver<(
-        Arc<Box<dyn Any + Send>>,
+        &'static Arc<RwLock<AssetEntrie>>,
         Box<dyn AssetLoader<Output = Box<dyn Any + Send>>>,
     )>,
     //pub main_rx: flume::Receiver<(Uuid, Box<dyn Any + Send>)>,
     //pub thread_tx: flume::Sender<(Uuid, Box<dyn Any + Send>)>,
+}
+pub struct AssetEntrie {
+    pub loaded: bool,
+    pub asset: Option<Box<dyn Any + Send>>,
+}
+unsafe impl Send for AssetEntrie {}
+unsafe impl Sync for AssetEntrie {}
+
+impl AssetEntrie {
+    pub fn new() -> Self {
+        Self {
+            loaded: false,
+            asset: None,
+        }
+    }
+}
+impl std::fmt::Debug for AssetEntrie {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.loaded.fmt(f)
+    }
+}
+pub struct AssetEntrieTyped<T> {
+    pub loaded: bool,
+    pub asset: Option<T>,
+}
+
+impl<T> AssetEntrieTyped<T> {
+    pub fn new() -> Self {
+        Self {
+            loaded: false,
+            asset: None,
+        }
+    }
 }
 
 impl AssetManager {
@@ -50,11 +86,11 @@ impl AssetManager {
         let uuid = Uuid::new_v4();
         loader.set_engine(*dupe(self).engine);
 
-        self.assets.insert(uuid, Arc::new(Box::new(0_u8)));
-        let asset_ref = self.assets.get(&uuid).unwrap();
+        self.assets
+            .insert(uuid, Arc::new(RwLock::new(AssetEntrie::new())));
 
         self.main_tx
-            .send((Arc::clone(asset_ref), Box::new(loader)))
+            .send((dupe(self).assets.get(&uuid).unwrap(), Box::new(loader)))
             .unwrap();
 
         AssetHandle::new(uuid, dupe(self))
@@ -67,7 +103,7 @@ impl Default for AssetManager {
     }
 }
 pub struct AssetHandle<T> {
-    uuid: Uuid,
+    pub uuid: Uuid,
     manager: &'static mut AssetManager,
     _p: PhantomData<T>,
 }
@@ -82,7 +118,7 @@ impl<T> Clone for AssetHandle<T> {
     }
 }
 
-impl<T> AssetHandle<T> {
+impl<T: 'static> AssetHandle<T> {
     pub fn new(uuid: Uuid, manager: &'static mut AssetManager) -> Self {
         Self {
             uuid,
@@ -90,49 +126,139 @@ impl<T> AssetHandle<T> {
             _p: PhantomData,
         }
     }
-    pub fn is_loaded(&self) -> bool {
-        self.manager.assets.contains_key(&self.uuid)
-    }
-    pub fn get(&self) -> &'static T {
-        dupe(self)
-            .manager
+    pub async fn is_loaded(&self) -> bool {
+        self.manager
             .assets
             .get(&self.uuid)
             .unwrap()
-            .downcast_ref()
-            .unwrap()
+            .read()
+            .await
+            .loaded
     }
-    pub fn get_checked(&self) -> Option<&'static T> {
-        match self.is_loaded() {
-            true => Some(self.get()),
+    pub async fn get(&self) -> RwLockReadGuard<T> {
+        let a: tokio::sync::RwLockReadGuard<AssetEntrie> =
+            self.manager.assets.get(&self.uuid).unwrap().read().await;
+        tokio::sync::RwLockReadGuard::<'_, AssetEntrie>::map(a, |a| {
+            a.asset.as_ref().unwrap().downcast_ref::<T>().unwrap()
+        })
+    }
+    pub async fn get_checked(&self) -> Option<RwLockReadGuard<T>> {
+        match self.is_loaded().await {
+            true => Some(self.get().await),
             false => None,
         }
     }
 
-    pub fn get_mut(&self) -> &'static mut T {
-        dupe(self)
+    pub async fn get_mut(&mut self) -> RwLockMappedWriteGuard<T> {
+        let a = self
             .manager
             .assets
             .get_mut(&self.uuid)
             .unwrap()
-            .downcast_mut()
-            .unwrap()
+            .write()
+            .await;
+        let a = tokio::sync::RwLockWriteGuard::<'_, AssetEntrie>::map(a, |a| {
+            a.asset.as_mut().unwrap().downcast_mut::<T>().unwrap()
+        });
+        a
     }
-    pub fn get_mut_checked(&self) -> Option<&'static mut T> {
-        match self.is_loaded() {
-            true => Some(self.get_mut()),
+    pub async fn get_mut_checked(&mut self) -> Option<RwLockMappedWriteGuard<T>> {
+        match self.is_loaded().await {
+            true => Some(self.get_mut().await),
+            false => None,
+        }
+    }
+    pub fn is_loaded_blocking(&self) -> bool {
+        self.manager
+            .assets
+            .get(&self.uuid)
+            .unwrap()
+            .blocking_read()
+            .loaded
+    }
+    pub fn get_blocking(&self) -> RwLockReadGuard<T> {
+        let a: tokio::sync::RwLockReadGuard<AssetEntrie> =
+            self.manager.assets.get(&self.uuid).unwrap().blocking_read();
+        tokio::sync::RwLockReadGuard::<'_, AssetEntrie>::map(a, |a| {
+            a.asset.as_ref().unwrap().downcast_ref::<T>().unwrap()
+        })
+    }
+    pub fn get_checked_blocking(&self) -> Option<RwLockReadGuard<T>> {
+        match self.is_loaded_blocking() {
+            true => Some(self.get_blocking()),
+            false => None,
+        }
+    }
+
+    pub fn get_mut_blocking(&mut self) -> RwLockMappedWriteGuard<T> {
+        let a = self
+            .manager
+            .assets
+            .get_mut(&self.uuid)
+            .unwrap()
+            .blocking_write();
+        tokio::sync::RwLockWriteGuard::<'_, AssetEntrie>::map(a, |a| {
+            a.asset.as_mut().unwrap().downcast_mut::<T>().unwrap()
+        })
+    }
+    pub fn get_mut_checked_blocking(&mut self) -> Option<RwLockMappedWriteGuard<T>> {
+        match self.is_loaded_blocking() {
+            true => Some(self.get_mut_blocking()),
+            false => None,
+        }
+    }
+    pub fn try_is_loaded(&self) -> Result<bool, TryLockError> {
+        let a = self.manager.assets.get(&self.uuid).unwrap().try_read()?;
+        Ok(a.loaded)
+    }
+    pub fn try_get(&self) -> Result<RwLockReadGuard<T>, TryLockError> {
+        let a: tokio::sync::RwLockReadGuard<AssetEntrie> =
+            self.manager.assets.get(&self.uuid).unwrap().try_read()?;
+        Ok(tokio::sync::RwLockReadGuard::<'_, AssetEntrie>::map(
+            a,
+            |a| a.asset.as_ref().unwrap().downcast_ref::<T>().unwrap(),
+        ))
+    }
+    pub fn try_get_checked(&self) -> Result<Option<RwLockReadGuard<T>>, TryLockError> {
+        match self.is_loaded_blocking() {
+            true => Ok(Some(self.try_get()?)),
+            false => Ok(None),
+        }
+    }
+
+    pub fn try_get_mut(&mut self) -> Result<RwLockMappedWriteGuard<T>, TryLockError> {
+        let a = self
+            .manager
+            .assets
+            .get_mut(&self.uuid)
+            .unwrap()
+            .try_write()?;
+        let res = tokio::sync::RwLockWriteGuard::<'_, AssetEntrie>::map(a, |a| {
+            a.asset.as_mut().unwrap().downcast_mut::<T>().unwrap()
+        });
+        Ok(res)
+    }
+    pub fn try_get_mut_checked(&mut self) -> Option<RwLockMappedWriteGuard<T>> {
+        match self.is_loaded_blocking() {
+            true => Some(self.get_mut_blocking()),
             false => None,
         }
     }
 }
 
-impl<T> Future for AssetHandle<T> {
-    type Output = ();
+impl<T: 'static> Future for AssetHandle<T> {
+    type Output = Self;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        match self.is_loaded() {
-            true => Poll::Ready(()),
-            false => {
+        match self.try_is_loaded() {
+            Ok(x) => match x {
+                true => Poll::Ready(self.clone()),
+                false => {
+                    cx.waker().wake_by_ref();
+                    Poll::Pending
+                }
+            },
+            Err(_) => {
                 cx.waker().wake_by_ref();
                 Poll::Pending
             }
