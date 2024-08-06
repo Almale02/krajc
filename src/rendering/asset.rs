@@ -92,8 +92,47 @@ impl AssetManager {
         self.main_tx
             .send((dupe(self).assets.get(&uuid).unwrap(), Box::new(loader)))
             .unwrap();
-
         AssetHandle::new(uuid, dupe(self))
+    }
+    pub fn load_resource_bulk<T: AssetLoader<Output = Box<dyn Any + Send>> + 'static>(
+        &mut self,
+        loaders: Vec<T>,
+    ) -> Vec<AssetHandle<T>> {
+        loaders
+            .into_iter()
+            .map(|mut loader| {
+                let uuid = Uuid::new_v4();
+                loader.set_engine(*dupe(self).engine);
+
+                self.assets
+                    .insert(uuid, Arc::new(RwLock::new(AssetEntrie::new())));
+
+                self.main_tx
+                    .send((dupe(self).assets.get(&uuid).unwrap(), Box::new(loader)))
+                    .unwrap();
+                AssetHandle::new(uuid, dupe(self))
+            })
+            .collect()
+    }
+    pub fn load_resource_bulk_untype(
+        &mut self,
+        loaders: Vec<impl AssetLoader<Output = Box<dyn Any + Send>> + 'static>,
+    ) -> Vec<AssetHandleUntype> {
+        loaders
+            .into_iter()
+            .map(|mut loader| {
+                let uuid = Uuid::new_v4();
+                loader.set_engine(*dupe(self).engine);
+
+                self.assets
+                    .insert(uuid, Arc::new(RwLock::new(AssetEntrie::new())));
+
+                self.main_tx
+                    .send((dupe(self).assets.get(&uuid).unwrap(), Box::new(loader)))
+                    .unwrap();
+                AssetHandleUntype::new(uuid, dupe(self))
+            })
+            .collect()
     }
 }
 
@@ -287,8 +326,56 @@ impl AssetHandleUntype {
     pub fn is_loaded(&self) -> bool {
         self.manager.assets.contains_key(&self.uuid)
     }
+    pub fn try_is_loaded(&self) -> Result<bool, TryLockError> {
+        let a = self.manager.assets.get(&self.uuid).unwrap().try_read()?;
+        Ok(a.loaded)
+    }
+}
+
+impl Future for AssetHandleUntype {
+    type Output = Self;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        match self.try_is_loaded() {
+            Ok(x) => match x {
+                true => Poll::Ready(self.clone()),
+                false => {
+                    cx.waker().wake_by_ref();
+                    Poll::Pending
+                }
+            },
+            Err(_) => {
+                cx.waker().wake_by_ref();
+                Poll::Pending
+            }
+        }
+    }
 }
 
 pub trait AssetLoader: Unpin + Send + Future<Output = Box<dyn Any + Send>> {
-    fn set_engine(&mut self, engine: &'static mut EngineRuntime);
+    fn set_engine(&mut self, engine: Arc<RwLock<EngineRuntime>>);
 }
+pub struct SendWrapper<T> {
+    pub value: T,
+}
+
+impl<T> SendWrapper<T> {
+    pub fn new(value: T) -> Self {
+        Self { value }
+    }
+}
+
+impl<T> std::ops::Deref for SendWrapper<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
+impl<T> std::ops::DerefMut for SendWrapper<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.value
+    }
+}
+unsafe impl<T> Send for SendWrapper<T> {}
+unsafe impl<T> Sync for SendWrapper<T> {}

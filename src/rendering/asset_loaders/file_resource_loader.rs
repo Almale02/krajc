@@ -11,7 +11,9 @@ use futures::FutureExt;
 use std::any::Any;
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
 use tokio::fs;
+use tokio::sync::RwLock;
 use wgpu::ShaderModuleDescriptor;
 
 pub struct FileResourceLoader<T: FileLoadable + Future<Output = Box<dyn Any + Send>> + 'static> {
@@ -19,7 +21,7 @@ pub struct FileResourceLoader<T: FileLoadable + Future<Output = Box<dyn Any + Se
     file_loader: BoxFuture<'static, tokio::io::Result<Vec<u8>>>,
     loaded_file: bool,
     processor: T,
-    engine: TypedAddr<EngineRuntime>,
+    engine: Arc<RwLock<EngineRuntime>>,
 }
 
 impl<T: FileLoadable + 'static + Future<Output = Box<dyn Any + Send>> + Send + Unpin + Default>
@@ -31,7 +33,7 @@ impl<T: FileLoadable + 'static + Future<Output = Box<dyn Any + Send>> + Send + U
             file_loader: fs::read(path).boxed(),
             loaded_file: false,
             processor: T::default(),
-            engine: TypedAddr::default(),
+            engine: Arc::default(),
         }
     }
 }
@@ -39,8 +41,8 @@ impl<T: FileLoadable + 'static + Future<Output = Box<dyn Any + Send>> + Send + U
 impl<T: FileLoadable + Future<Output = Box<dyn Any + Send>> + Send + Unpin + 'static> AssetLoader
     for FileResourceLoader<T>
 {
-    fn set_engine(&mut self, engine: &'static mut crate::engine_runtime::EngineRuntime) {
-        self.engine = TypedAddr::new_with_ref(engine);
+    fn set_engine(&mut self, engine: Arc<RwLock<EngineRuntime>>) {
+        self.engine = engine;   
     }
 }
 

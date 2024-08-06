@@ -13,7 +13,7 @@ use crate::{
             runtime_schedule::RuntimePhysicsSyncMainSchedule,
             system_params::{
                 system_query::{EcsWorld, SystemQuery},
-                system_resource::{EngineResource, Res},
+                system_resource::Res,
             },
         },
         EngineRuntime,
@@ -201,7 +201,7 @@ pub fn mark_static_bodies_trans_changed(
     mut query: SystemQuery<&mut Transform, With<FixedRigidBody>>,
 ) {
     for mut trans in query.iter_mut() {
-        let derefed = trans.deref_mut();
+        let _ = trans.deref_mut();
     }
 }
 
@@ -244,20 +244,3 @@ pub fn physics_systems(runtime: &mut EngineRuntime) {
 
     mark_static_bodies_trans_changed!(runtime);
 }
-
-/*impl EngineResource for TestRes {
-    fn init(engine: &mut EngineRuntime) -> &'static mut Self {
-        TypedAddr::new({
-            let op = engine.static_resource_map.get_mut(&TypeId::of::<Self>());
-            match op {
-                Some(val) => *val,
-                None => {
-                    let new = Box::leak(Box::new(TestRes { test_field: 0 }));
-                    let addr = TypedAddr::new_with_ref(new);
-                    addr.addr
-                }
-            }
-        })
-        .get()
-    }
-}*/

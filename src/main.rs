@@ -12,39 +12,31 @@ use crate::rendering::systems::general::update_rendering;
 
 use bevy_ecs::component::Component;
 use futures::{
-    future::{join_all, BoxFuture},
-    stream::{FuturesOrdered, FuturesUnordered},
-    FutureExt, StreamExt,
+    future::join_all, stream::FuturesUnordered, FutureExt, StreamExt
 };
 use krajc::system_fn;
 use physics::{
     components::{
         collider::Collider,
-        general::{LinearVelocity, PhysicsSyncDirectBodyModifications, RigidBody, RigidBodyHandle},
+        general::{PhysicsSyncDirectBodyModifications, RigidBody},
     },
     systems::rigid_body::physics_systems,
     Gravity,
 };
-use pollster::FutureExt as _;
 use rapier3d::{
-    dynamics::{RigidBodySet, RigidBodyType},
+    dynamics::RigidBodyType,
     geometry::ColliderShape,
     math::Translation,
     na::{Isometry3, UnitQuaternion, Vector3 as Vector},
 };
 
-use tokio::sync::RwLockWriteGuard;
-use tracing_tracy::client::SpanLocation;
 use typed_addr::{dupe, TypedAddr};
-use uuid::Uuid;
 
 use std::{
-    any::{type_name, Any, TypeId},
+    any::{type_name, Any},
     collections::HashMap,
-    future::Future,
     hash::Hash,
     ops::{Deref, DerefMut},
-    rc::Rc,
     time::{Duration, Instant},
 };
 
@@ -55,25 +47,25 @@ use rapier3d::na::Vector3 as NaVec3;
 use engine_runtime::{
     schedule_manager::{
         runtime_schedule::{
-            RuntimePhysicsSyncMainSchedule, RuntimePostPhysicsSyncSchedule,
-            RuntimePostUpdateSchedule, RuntimeUpdateSchedule, RuntimeUpdateScheduleData,
+            RuntimePostPhysicsSyncSchedule,
+            RuntimeUpdateSchedule, RuntimeUpdateScheduleData,
         },
-        schedule::ScheduleRunnable,
         system_params::{
             system_local::Local,
-            system_query::{EcsWorld, SystemQuery},
+            system_query::EcsWorld,
             system_resource::Res,
         },
     }, target_fps::TargetFps, EngineRuntime
 };
+use engine_runtime::schedule_manager::runtime_schedule::RuntimePostUpdateSchedule;
 
 use ordered_float::OrderedFloat;
 use rendering::{
-    asset::{AssetEntrie, AssetHandle, AssetLoader}, asset_loaders::file_resource_loader::{FileResourceLoader, RawFileLoader, ShaderLoader}, buffer_manager::{managed_buffer::ManagedBufferGeneric, InstanceBufferType, UniformBufferType}, builtin_materials::{
+    asset::{AssetEntrie, AssetLoader}, asset_loaders::file_resource_loader::{FileResourceLoader, RawFileLoader, ShaderLoader}, buffer_manager::{managed_buffer::ManagedBufferGeneric, InstanceBufferType, UniformBufferType}, builtin_materials::{
         light_material::material::update_light_material,
         texture_material::material::update_texture_material,
-    }, camera::camera::Camera, managers::RenderManagerResource, mesh::mesh::{Mesh, TextureVertexTemplates}, systems::general::{
-        make_light_follow_camera, move_stuff_up, sync_light, Color, Light, Transform,
+    }, camera::camera::Camera, managers::RenderManagerResource, mesh::mesh::TextureVertexTemplates, systems::general::{
+        make_light_follow_camera, sync_light, Color, Light, Transform,
     }
 };
 
@@ -294,13 +286,52 @@ pub async fn run() {
     //render_states.material.register_systems(runtime);
 
     
-    let shader_res = runtime
+    let shader_res = 
+        runtime
         .render_resource_manager
-        .load_resource(FileResourceLoader::<ShaderLoader>::new(
+        .load_resource(FileResourceLoader::<RawFileLoader>::new(
+            "resources/shaders/shader_light.wgsl"
+        
+        ));
+    let shader_res2 = 
+        runtime
+        .render_resource_manager
+        .load_resource(FileResourceLoader::<RawFileLoader>::new(
+            "resources/shaders/shader_light.wgsl"
+        
+        ));
+    let shader_res3 = 
+        runtime
+        .render_resource_manager
+        .load_resource(FileResourceLoader::<RawFileLoader>::new(
+            "resources/shaders/shader_light.wgsl"
+        
+        ));
+    let shader_res4 = 
+        runtime
+        .render_resource_manager
+        .load_resource(FileResourceLoader::<RawFileLoader>::new(
             "resources/shaders/shader_light.wgsl"
         
         ));
     dbg!(shader_res.await.is_loaded().await);
+    dbg!(shader_res2.await.is_loaded().await);
+    dbg!(shader_res3.await.is_loaded().await);
+    dbg!(shader_res4.await.is_loaded().await);
+    /*let assets = join_all(runtime.render_resource_manager.load_resource_bulk(vec![
+        FileResourceLoader::<ShaderLoader>::new(
+                "resources/shaders/shader_light.wgsl"),
+        FileResourceLoader::<ShaderLoader>::new(
+                "resources/shaders/shader_light.wgsl"),
+        FileResourceLoader::<ShaderLoader>::new(
+                "resources/shaders/shader_light.wgsl"),
+        FileResourceLoader::<ShaderLoader>::new(
+                "resources/shaders/shader_light.wgsl"),
+    ])).await;
+
+    for i in assets {
+        dbg!(i.is_loaded().await);
+    }*/
 
     event_loop.run(move |event, _window_target, control_flow: &mut ControlFlow| {
         span!(trace_loop, "event loop");

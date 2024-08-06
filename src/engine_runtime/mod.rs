@@ -33,6 +33,7 @@ pub struct EngineRuntime {
     pub ecs: EcsManager,
     pub physics: PhysicsWorld,
 }
+unsafe impl Send for EngineRuntime {}
 
 impl EngineRuntime {
     pub fn new() -> Self {
