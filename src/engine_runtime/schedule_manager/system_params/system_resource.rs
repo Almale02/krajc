@@ -63,4 +63,5 @@ impl<T: EngineResource> Res<T> {
 pub trait EngineResource {
     fn get_mut(engine: &'static mut EngineRuntime) -> &'static mut Self;
     fn get(engine: &'static mut EngineRuntime) -> &'static Self;
+    fn get_no_init(engine: &'static EngineRuntime) -> &'static Self;
 }

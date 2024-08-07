@@ -9,16 +9,16 @@ use std::{
 };
 
 use futures::{future::BoxFuture, Future, FutureExt};
-use tokio::{
-    fs,
-    sync::{RwLock, RwLockMappedWriteGuard, RwLockReadGuard, RwLockWriteGuard, TryLockError},
-};
+use tokio::sync::{RwLock, RwLockMappedWriteGuard, RwLockReadGuard, TryLockError};
 use uuid::Uuid;
 
 use crate::{engine_runtime::EngineRuntime, typed_addr::dupe, Lateinit};
 
+use super::asset_loaders::file_resource_loader::SendEngineRuntime;
+
 pub struct AssetManager {
     pub engine: Lateinit<&'static mut EngineRuntime>,
+    pub engine_locked: Lateinit<SendEngineRuntime>,
     pub assets: HashMap<Uuid, Arc<RwLock<AssetEntrie>>>,
     pub main_tx: flume::Sender<(
         &'static Arc<RwLock<AssetEntrie>>,
@@ -74,8 +74,8 @@ impl AssetManager {
             assets: HashMap::default(),
             main_tx,
             thread_rx,
-            //main_rx,
-            //thread_tx,
+            engine_locked: Default::default(), //main_rx,
+                                               //thread_tx,
         }
     }
 
@@ -84,7 +84,8 @@ impl AssetManager {
         mut loader: T,
     ) -> AssetHandle<T> {
         let uuid = Uuid::new_v4();
-        loader.set_engine(*dupe(self).engine);
+
+        loader.set_engine((*self.engine_locked).clone());
 
         self.assets
             .insert(uuid, Arc::new(RwLock::new(AssetEntrie::new())));
@@ -102,7 +103,7 @@ impl AssetManager {
             .into_iter()
             .map(|mut loader| {
                 let uuid = Uuid::new_v4();
-                loader.set_engine(*dupe(self).engine);
+                loader.set_engine((*self.engine_locked).clone());
 
                 self.assets
                     .insert(uuid, Arc::new(RwLock::new(AssetEntrie::new())));
@@ -122,7 +123,7 @@ impl AssetManager {
             .into_iter()
             .map(|mut loader| {
                 let uuid = Uuid::new_v4();
-                loader.set_engine(*dupe(self).engine);
+                loader.set_engine((*self.engine_locked).clone());
 
                 self.assets
                     .insert(uuid, Arc::new(RwLock::new(AssetEntrie::new())));
@@ -353,14 +354,14 @@ impl Future for AssetHandleUntype {
 }
 
 pub trait AssetLoader: Unpin + Send + Future<Output = Box<dyn Any + Send>> {
-    fn set_engine(&mut self, engine: Arc<RwLock<EngineRuntime>>);
+    fn set_engine(&mut self, engine: SendEngineRuntime);
 }
-pub struct SendWrapper<T> {
-    pub value: T,
+pub struct SendWrapper<T: 'static> {
+    pub value: &'static mut T,
 }
 
-impl<T> SendWrapper<T> {
-    pub fn new(value: T) -> Self {
+impl<T: 'static> SendWrapper<T> {
+    pub fn new(value: &'static mut T) -> Self {
         Self { value }
     }
 }
@@ -369,12 +370,12 @@ impl<T> std::ops::Deref for SendWrapper<T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        &self.value
+        &*self.value
     }
 }
 impl<T> std::ops::DerefMut for SendWrapper<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.value
+        &mut *self.value
     }
 }
 unsafe impl<T> Send for SendWrapper<T> {}

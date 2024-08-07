@@ -253,6 +253,18 @@ fn impl_res(ast: &syn::DeriveInput) -> TokenStream {
             })
             .get()
         }
+        fn get_no_init(engine: &crate::EngineRuntime) -> &'static Self {
+            crate::TypedAddr::new({
+                let op = engine.static_resource_map.get(&std::any::TypeId::of::<Self>());
+                match op {
+                    Some(val) => *val,
+                    None => {
+                        panic!("read an uninited resoruce without in get_no_init()");
+                    }
+                }
+            })
+            .get()
+        }
     }
 
     };

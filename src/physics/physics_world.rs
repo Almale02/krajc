@@ -52,6 +52,10 @@ impl EngineResource for PhysicsWorld {
     fn get(engine: &'static mut crate::engine_runtime::EngineRuntime) -> &'static Self {
         &engine.physics
     }
+
+    fn get_no_init(engine: &'static crate::engine_runtime::EngineRuntime) -> &'static Self {
+        &engine.physics
+    }
 }
 
 #[derive(Default)]
@@ -69,12 +73,20 @@ impl EngineResource for RigidBodySet {
     fn get(engine: &'static mut crate::engine_runtime::EngineRuntime) -> &'static Self {
         &engine.physics.rigid_body_set
     }
+
+    fn get_no_init(engine: &'static crate::engine_runtime::EngineRuntime) -> &'static Self {
+        &engine.physics.rigid_body_set
+    }
 }
 impl EngineResource for ColliderSet {
     fn get_mut(engine: &'static mut crate::engine_runtime::EngineRuntime) -> &'static mut Self {
         &mut engine.physics.collider_set
     }
     fn get(engine: &'static mut crate::engine_runtime::EngineRuntime) -> &'static Self {
+        &engine.physics.collider_set
+    }
+
+    fn get_no_init(engine: &'static crate::engine_runtime::EngineRuntime) -> &'static Self {
         &engine.physics.collider_set
     }
 }
@@ -85,6 +97,9 @@ impl EngineResource for PhysicsMappings {
     fn get(engine: &'static mut crate::engine_runtime::EngineRuntime) -> &'static Self {
         &engine.physics.mappings
     }
+    fn get_no_init(engine: &'static crate::engine_runtime::EngineRuntime) -> &'static Self {
+        &engine.physics.mappings
+    }
 }
 impl EngineResource for IslandManager {
     fn get_mut(engine: &'static mut crate::engine_runtime::EngineRuntime) -> &'static mut Self {
@@ -92,6 +107,10 @@ impl EngineResource for IslandManager {
     }
 
     fn get(engine: &'static mut crate::engine_runtime::EngineRuntime) -> &'static Self {
+        &engine.physics.island_manager
+    }
+
+    fn get_no_init(engine: &'static crate::engine_runtime::EngineRuntime) -> &'static Self {
         &engine.physics.island_manager
     }
 }

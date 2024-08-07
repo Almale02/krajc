@@ -71,6 +71,9 @@ impl EngineRuntime {
     pub fn get_resource<T: EngineResource>(&mut self) -> &'static T {
         T::get(dupe(self))
     }
+    pub fn get_resource_no_init<T: EngineResource>(&self) -> &'static T {
+        T::get(dupe(self))
+    }
 }
 #[derive(Default)]
 pub struct StateNames {

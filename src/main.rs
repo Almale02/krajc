@@ -30,14 +30,11 @@ use rapier3d::{
     na::{Isometry3, UnitQuaternion, Vector3 as Vector},
 };
 
+use tokio::sync::RwLock;
 use typed_addr::{dupe, TypedAddr};
 
 use std::{
-    any::{type_name, Any},
-    collections::HashMap,
-    hash::Hash,
-    ops::{Deref, DerefMut},
-    time::{Duration, Instant},
+    any::{type_name, Any}, collections::HashMap, hash::Hash, ops::{Deref, DerefMut}, sync::Arc, time::{Duration, Instant}
 };
 
 use cgmath::{num_traits::Signed, Deg, Point3, Rad, Vector3};
@@ -61,7 +58,7 @@ use engine_runtime::schedule_manager::runtime_schedule::RuntimePostUpdateSchedul
 
 use ordered_float::OrderedFloat;
 use rendering::{
-    asset::{AssetEntrie, AssetLoader}, asset_loaders::file_resource_loader::{FileResourceLoader, RawFileLoader, ShaderLoader}, buffer_manager::{managed_buffer::ManagedBufferGeneric, InstanceBufferType, UniformBufferType}, builtin_materials::{
+    asset::{AssetEntrie, AssetLoader, SendWrapper}, asset_loaders::file_resource_loader::{FileResourceLoader, RawFileLoader, ShaderLoader}, buffer_manager::{managed_buffer::ManagedBufferGeneric, InstanceBufferType, UniformBufferType}, builtin_materials::{
         light_material::material::update_light_material,
         texture_material::material::update_texture_material,
     }, camera::camera::Camera, managers::RenderManagerResource, mesh::mesh::TextureVertexTemplates, systems::general::{
@@ -224,6 +221,7 @@ pub async fn run() {
 
     runtime.buffer_manager.engine = unsafe { ENGINE_RUNTIME.get() };
     runtime.render_resource_manager.engine.set( unsafe { ENGINE_RUNTIME.get() });
+    runtime.render_resource_manager.engine_locked.set(Arc::new(RwLock::new(SendWrapper::new(unsafe {ENGINE_RUNTIME.get()}))));
     dupe(runtime)
         .buffer_manager
         .register_new_buffer_type::<UniformBufferType>();
@@ -281,7 +279,7 @@ pub async fn run() {
     let window_ref = render_states.window.deref();
 
     let load = runtime.get_resource_mut::<RuntimeEngineLoadSchedule>();
-    load.execute(dupe(runtime));
+    //load.execute(dupe(runtime));
 
     //render_states.material.register_systems(runtime);
 
@@ -289,28 +287,28 @@ pub async fn run() {
     let shader_res = 
         runtime
         .render_resource_manager
-        .load_resource(FileResourceLoader::<RawFileLoader>::new(
+        .load_resource(FileResourceLoader::<ShaderLoader>::new(
             "resources/shaders/shader_light.wgsl"
         
         ));
     let shader_res2 = 
         runtime
         .render_resource_manager
-        .load_resource(FileResourceLoader::<RawFileLoader>::new(
+        .load_resource(FileResourceLoader::<ShaderLoader>::new(
             "resources/shaders/shader_light.wgsl"
         
         ));
     let shader_res3 = 
         runtime
         .render_resource_manager
-        .load_resource(FileResourceLoader::<RawFileLoader>::new(
+        .load_resource(FileResourceLoader::<ShaderLoader>::new(
             "resources/shaders/shader_light.wgsl"
         
         ));
     let shader_res4 = 
         runtime
         .render_resource_manager
-        .load_resource(FileResourceLoader::<RawFileLoader>::new(
+        .load_resource(FileResourceLoader::<ShaderLoader>::new(
             "resources/shaders/shader_light.wgsl"
         
         ));
@@ -346,7 +344,7 @@ pub async fn run() {
                 //dbg!(shader_res.try_is_loaded().unwrap());
 
                 
-                runtime.update(dt, start);
+                //runtime.update(dt, start);
                 last_render_time = frame_start;
                 //dbg!(1. / dt.as_secs_f32());
                 let since_start = frame_start - start;
@@ -640,30 +638,57 @@ pub struct Lateinit<T> {
 unsafe impl<T> Send for Lateinit<T> {}
 
 impl<T> Lateinit<T> {
+    pub fn new(data: T) -> Self {
+        Self {value: LateinitEnum::Some(data)}
+    }
     fn set(&mut self, value: T) {
         self.value = LateinitEnum::<T>::Some(value);
     }
-    fn as_option(&self) -> Option<&T> {
+    pub fn as_option(&self) -> Option<&T> {
         match &self.value {
             LateinitEnum::Some(val) => Some(val),
             LateinitEnum::Uninited => None,
         }
     }
-    fn as_option_mut(&mut self) -> Option<&mut T> {
+    pub fn as_option_mut(&mut self) -> Option<&mut T> {
         match &mut self.value {
             LateinitEnum::Some(val) => Some(val),
             LateinitEnum::Uninited => None,
         }
     }
-    const fn default_const() -> Self {
+    pub const fn default_const() -> Self {
         Lateinit {
             value: LateinitEnum::Uninited,
         }
     }
-    fn consume(self) -> T {
+    pub fn consume(self) -> T {
         match self.value {
             LateinitEnum::Some(x) => x,
             LateinitEnum::Uninited => panic!("attempted to consume an uninited Lateinit"),
+        }
+    }
+    pub fn get(&self) -> &T {
+        
+        match &self.value {
+            LateinitEnum::Some(value) => value,
+            LateinitEnum::Uninited => {
+                panic!(
+                    "dereferenced an uninited value with type {:?}",
+                    type_name::<T>()
+                );
+            }
+        }
+    }
+    pub fn get_mut(&mut self) -> &mut T {
+        
+        match &mut self.value {
+            LateinitEnum::Some(value) => value,
+            LateinitEnum::Uninited => {
+                panic!(
+                    "dereferenced an uninited value with type {:?}",
+                    type_name::<T>()
+                );
+            }
         }
     }
 }
