@@ -28,8 +28,8 @@ pub struct AssetManager {
         &'static Arc<RwLock<AssetEntrie>>,
         Box<dyn AssetLoader<Output = Box<dyn Any + Send>>>,
     )>,
-    //pub main_rx: flume::Receiver<(Uuid, Box<dyn Any + Send>)>,
-    //pub thread_tx: flume::Sender<(Uuid, Box<dyn Any + Send>)>,
+    pub thread_main_exec_tx: flume::Sender<(Box<dyn Any + Send>, Box<dyn Fn(Box<dyn Any + Send>)>)>, //pub main_rx: flume::Receiver<(Uuid, Box<dyn Any + Send>)>,
+    pub main_exec_rx: flume::Receiver<(Box<dyn Any + Send>, Box<dyn Fn(Box<dyn Any + Send>)>)>, //pub thread_tx: flume::Sender<(Uuid, Box<dyn Any + Send>)>,
 }
 pub struct AssetEntrie {
     pub loaded: bool,
@@ -69,13 +69,16 @@ impl AssetManager {
     pub fn new() -> Self {
         let (main_tx, thread_rx) = flume::unbounded();
         //let (thread_tx, main_rx) = flume::unbounded();
+
+        let (thread_main_exec_tx, main_exec_rx) = flume::unbounded();
         Self {
             engine: Lateinit::default(),
             assets: HashMap::default(),
             main_tx,
             thread_rx,
-            engine_locked: Default::default(), //main_rx,
-                                               //thread_tx,
+            engine_locked: Default::default(),
+            thread_main_exec_tx,
+            main_exec_rx,
         }
     }
 
@@ -355,6 +358,10 @@ impl Future for AssetHandleUntype {
 
 pub trait AssetLoader: Unpin + Send + Future<Output = Box<dyn Any + Send>> {
     fn set_engine(&mut self, engine: SendEngineRuntime);
+    fn set_thread_main_exec(
+        &mut self,
+        tx: flume::Sender<(Box<dyn Any + Send>, Box<dyn Fn(Box<dyn Any + Send>)>)>,
+    );
 }
 pub struct SendWrapper<T: 'static> {
     pub value: &'static mut T,

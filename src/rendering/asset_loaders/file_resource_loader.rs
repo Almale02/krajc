@@ -8,6 +8,7 @@ use crate::Lateinit;
 use futures::future::BoxFuture;
 use futures::task::Context;
 use futures::task::Poll;
+use futures::task::UnsafeFutureObj;
 use futures::FutureExt;
 use rapier3d::crossbeam::atomic::AtomicCell;
 use std::any::Any;
@@ -28,6 +29,8 @@ pub struct FileResourceLoader<T: FileLoadable + Future<Output = Box<dyn Any + Se
     loaded_file: bool,
     processor: T,
     engine: Lateinit<SendEngineRuntime>,
+    thread_main_exec_tx:
+        Lateinit<flume::Sender<(Box<dyn Any + Send>, Box<dyn Fn(Box<dyn Any + Send>)>)>>,
 }
 
 impl<T: FileLoadable + 'static + Future<Output = Box<dyn Any + Send>> + Send + Unpin + Default>
@@ -41,6 +44,7 @@ impl<T: FileLoadable + 'static + Future<Output = Box<dyn Any + Send>> + Send + U
             loaded_file: false,
             processor: T::default(),
             engine: Default::default(),
+            thread_main_exec_tx: Default::default(),
         }
     }
 }
@@ -50,6 +54,12 @@ impl<T: FileLoadable + Future<Output = Box<dyn Any + Send>> + Send + Unpin + 'st
 {
     fn set_engine(&mut self, engine: SendEngineRuntime) {
         self.engine.set(engine);
+    }
+    fn set_thread_main_exec(
+        &mut self,
+        tx: flume::Sender<(Box<dyn Any + Send>, Box<dyn Fn(Box<dyn Any + Send>)>)>,
+    ) {
+        self.thread_main_exec_tx.set(tx);
     }
 }
 
@@ -93,6 +103,11 @@ impl<T: FileLoadable + Future<Output = Box<dyn Any + Send>> + 'static + Send + U
 pub trait FileLoadable: Default {
     fn set_bytes(&mut self, file: std::io::Result<Vec<u8>>);
     fn set_engine(&mut self, engine: SendEngineRuntime);
+
+    fn set_thread_main_exec(
+        &mut self,
+        tx: flume::Sender<(Box<dyn Any + Send>, Box<dyn Fn(Box<dyn Any + Send>)>)>,
+    );
 }
 
 /// could be use with FileResourceLoader
@@ -101,12 +116,15 @@ pub trait FileLoadable: Default {
 pub struct RawFileLoader {
     pub bytes: Vec<u8>,
     engine: Lateinit<SendEngineRuntime>,
+    thread_main_exec_tx:
+        Lateinit<flume::Sender<(Box<dyn Any + Send>, flume::Sender<Box<dyn Any + Send>>)>>,
 }
 impl RawFileLoader {
     pub fn new(bytes: Vec<u8>) -> Self {
         Self {
             bytes,
             engine: Lateinit::default(),
+            thread_main_exec_tx: Lateinit::default(),
         }
     }
 }
@@ -128,6 +146,13 @@ impl FileLoadable for RawFileLoader {
     fn set_engine(&mut self, engine: SendEngineRuntime) {
         self.engine.set(engine);
     }
+
+    fn set_thread_main_exec(
+        &mut self,
+        tx: flume::Sender<(Box<dyn Any + Send>, Box<dyn Fn(Box<dyn Any + Send>)>)>,
+    ) {
+        //self.thread_main_exec_tx.set(tx);
+    }
 }
 
 impl<T> Unpin for FileResourceLoader<T> where
@@ -137,16 +162,29 @@ impl<T> Unpin for FileResourceLoader<T> where
 
 /// could be use with FileResourceLoader
 /// returns the ShaderModule
-#[derive(Default)]
 pub struct ShaderLoader {
     pub bytes: Vec<u8>,
     engine: Lateinit<SendEngineRuntime>,
+    thread_main_exec_tx:
+        Lateinit<flume::Sender<(Box<dyn Any + Send>, Box<dyn Fn(Box<dyn Any + Send>)>)>>,
+    main_exec_callback_tx: flume::Sender<Box<dyn Any + Send>>,
+    main_exec_callback_rx: flume::Receiver<Box<dyn Any + Send>>,
+}
+
+impl Default for ShaderLoader {
+    fn default() -> Self {
+        ShaderLoader::new(Vec::default())
+    }
 }
 impl ShaderLoader {
     pub fn new(bytes: Vec<u8>) -> Self {
+        let (main_exec_callback_tx, main_exec_callback_rx) = flume::unbounded();
         Self {
             bytes,
             engine: Lateinit::default(),
+            thread_main_exec_tx: Lateinit::default(),
+            main_exec_callback_tx,
+            main_exec_callback_rx,
         }
     }
 }
@@ -155,40 +193,48 @@ impl Future for ShaderLoader {
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         cx.waker().wake_by_ref();
-        let engine = (*self.engine).try_write();
+
+        let this = unsafe { self.get_unchecked_mut() };
+        let engine = (*dupe(this).engine).try_write();
 
         if engine.is_err() {
             return Poll::Pending;
         }
         dbg!("gave up");
-        let mut engine = engine.unwrap();
+        let engine = engine.unwrap();
+        let bytes = this.bytes.clone();
 
-        let render = engine.get_resource_no_init::<RenderManagerResource>();
+        this.thread_main_exec_tx
+            .send((
+                Box::new(0),
+                Box::new(move |_x| {
+                    let render = engine.get_resource_no_init::<RenderManagerResource>();
 
-        /*let module = render.device.create_render_pipeline(ShaderModuleDescriptor {
-            label: Some("Shader from ShaderLoader"),
-            source: wgpu::ShaderSource::Wgsl(
-                String::from_utf8(self.bytes.clone())
-                    .unwrap()
-                    .as_str()
-                    .into(),
-            ),
+                    let module = render.device.create_shader_module(ShaderModuleDescriptor {
+                        label: Some("Shader from ShaderLoader"),
+                        source: wgpu::ShaderSource::Wgsl(
+                            String::from_utf8(bytes.clone()).unwrap().as_str().into(),
+                        ),
+                    });
+                }),
+            ))
+            .unwrap();
+
+        /*let module = render
+        .device
+        .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+            label: Some("camera_bind_group_layout"),
         });*/
-        let module = render
-            .device
-            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                }],
-                label: Some("camera_bind_group_layout"),
-            });
 
         Poll::Ready(Box::new(0))
         //Poll::Ready(Box::new(module))
@@ -202,5 +248,11 @@ impl FileLoadable for ShaderLoader {
 
     fn set_engine(&mut self, engine: SendEngineRuntime) {
         self.engine.set(engine);
+    }
+    fn set_thread_main_exec(
+        &mut self,
+        tx: flume::Sender<(Box<dyn Any + Send>, Box<dyn Fn(Box<dyn Any + Send>)>)>,
+    ) {
+        self.thread_main_exec_tx.set(tx);
     }
 }

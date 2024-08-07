@@ -343,6 +343,10 @@ pub async fn run() {
 
                 //dbg!(shader_res.try_is_loaded().unwrap());
 
+                while let Ok(req) = runtime.render_resource_manager.main_exec_rx.try_recv() {
+                    req.1(req.0);
+                }
+
                 
                 //runtime.update(dt, start);
                 last_render_time = frame_start;
