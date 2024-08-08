@@ -30,6 +30,14 @@ pub struct AssetManager {
     )>,
     pub thread_main_exec_tx: flume::Sender<Box<dyn Fn()>>, //pub main_rx: flume::Receiver<(Uuid, Box<dyn Any + Send>)>,
     pub main_exec_rx: flume::Receiver<Box<dyn Fn()>>, //pub thread_tx: flume::Sender<(Uuid, Box<dyn Any + Send>)>,
+    pub loaded_callback_tx: flume::Sender<(
+        Box<dyn Fn()>,
+        Box<dyn Fn(Box<dyn Any + Send>, &'static mut EngineRuntime)>,
+    )>,
+    pub loaded_callback_rx: flume::Receiver<(
+        Box<dyn Fn()>,
+        Box<dyn Fn(Box<dyn Any + Send>, &'static mut EngineRuntime)>,
+    )>,
 }
 pub struct AssetEntrie {
     pub loaded: bool,
@@ -97,11 +105,13 @@ impl AssetManager {
     pub fn load_resource<T: AssetLoader<Output = Box<dyn Any + Send>> + 'static>(
         &mut self,
         mut loader: T,
+        callbacks: Vec<Box<dyn Fn(Box<dyn Any + Send>, &'static mut EngineRuntime)>>,
     ) -> AssetHandle<T> {
         let uuid = Uuid::new_v4();
 
         loader.set_engine((*self.engine_locked).clone());
         loader.set_thread_main_exec(self.thread_main_exec_tx.clone());
+        loader.set_loaded_callback(self.loaded_callback_tx.clone());
 
         self.assets
             .insert(uuid, Arc::new(RwLock::new(AssetEntrie::new())));
@@ -128,26 +138,6 @@ impl AssetManager {
                     .send((dupe(self).assets.get(&uuid).unwrap(), Box::new(loader)))
                     .unwrap();
                 AssetHandle::new(uuid, dupe(self))
-            })
-            .collect()
-    }
-    pub fn load_resource_bulk_untype(
-        &mut self,
-        loaders: Vec<impl AssetLoader<Output = Box<dyn Any + Send>> + 'static>,
-    ) -> Vec<AssetHandleUntype> {
-        loaders
-            .into_iter()
-            .map(|mut loader| {
-                let uuid = Uuid::new_v4();
-                loader.set_engine((*self.engine_locked).clone());
-
-                self.assets
-                    .insert(uuid, Arc::new(RwLock::new(AssetEntrie::new())));
-
-                self.main_tx
-                    .send((dupe(self).assets.get(&uuid).unwrap(), Box::new(loader)))
-                    .unwrap();
-                AssetHandleUntype::new(uuid, dupe(self))
             })
             .collect()
     }
@@ -372,6 +362,13 @@ impl Future for AssetHandleUntype {
 pub trait AssetLoader: Unpin + Send + Future<Output = Box<dyn Any + Send>> {
     fn set_engine(&mut self, engine: SendEngineRuntime);
     fn set_thread_main_exec(&mut self, tx: flume::Sender<Box<dyn Fn()>>);
+    fn set_loaded_callback(
+        &mut self,
+        tx: flume::Sender<(
+            Box<dyn Fn()>,
+            Box<dyn Fn(Box<dyn Any + Send>, &'static mut EngineRuntime)>,
+        )>,
+    );
 }
 pub struct SendWrapper<T: 'static> {
     pub value: &'static mut T,

@@ -280,6 +280,10 @@ pub async fn run() {
     physics_systems(runtime);
 
     runtime
+        .get_resource_mut::<RuntimeEngineLoadSchedule>()
+        .calc_dep_graph(runtime);
+
+    runtime
         .get_resource_mut::<RuntimeUpdateSchedule>()
         .calc_dep_graph(runtime);
 
@@ -304,9 +308,7 @@ pub async fn run() {
     let window_ref = render_states.window.deref();
 
     let load = runtime.get_resource_mut::<RuntimeEngineLoadSchedule>();
-    //load.execute(dupe(runtime));
-
-    //render_states.material.register_systems(runtime);
+    load.execute(dupe(runtime));
 
     let mut shader_res = runtime
         .render_resource_manager
@@ -317,38 +319,79 @@ pub async fn run() {
     //let mut finished = false;
 
     //let mut cx = Context::from_waker(futures::task::noop_waker_ref());
-    let control_flow = ControlFlow::Poll;
+    let mut should_run = true;
 
     loop {
         let mut events = Vec::new();
         let mut scale_factor_changed: Option<PhysicalSize<u32>> = None;
-
-        event_loop.run_return(
-            |general_event, _, _control_flow_event| match general_event {
-                Event::WindowEvent { ref event, .. } => match event {
-                    WindowEvent::ScaleFactorChanged {
-                        scale_factor,
-                        new_inner_size,
-                    } => scale_factor_changed = Some(**new_inner_size),
-                    _ => events.push(general_event.to_static().unwrap()),
-                },
-                _ => events.push(general_event.to_static().unwrap().clone()),
-            },
-        );
-
         let frame_start = Instant::now();
+        let dt = frame_start - last_render_time;
 
-        dbg!(shader_res.try_is_loaded());
+
+        
         while let Ok(req) = runtime.render_resource_manager.main_exec_rx.try_recv() {
             req();
         }
-        //runtime.update(dt, start);
-        //last_render_time = frame_start;
-        //dbg!(1. / dt.as_secs_f32());
+
+        event_loop.run_return(|event, _, control_flow_event| match event {
+            Event::WindowEvent {
+                event: ref window_event,
+                ..
+            } => match window_event {
+                WindowEvent::ScaleFactorChanged {
+                    scale_factor: _,
+                    new_inner_size,
+                } => scale_factor_changed = Some(**new_inner_size),
+                _ => events.push(event.to_static().unwrap()),
+            },
+            Event::MainEventsCleared => {
+                control_flow_event.set_exit();
+
+                events.push(event.to_static().unwrap().clone())
+            }
+            _ => events.push(event.to_static().unwrap().clone()),
+        });
+
+        for event in events {
+            match event {
+                Event::DeviceEvent {
+                    event: DeviceEvent::MouseMotion{ delta, },
+                    .. // We're not using device_id currently
+                } => {
+                    render.get().camera_controller.deref_mut().process_mouse(delta.0, delta.1);
+                    
+                },
+                Event::WindowEvent {
+                    ref event,
+                    window_id,
+                } if window_id == window_ref.id() => {
+                    if !runtime.window_events(event) {
+                        match event {
+                            WindowEvent::CloseRequested | get_key_pressed!(VirtualKeyCode::Escape) => {
+                                should_run = false;
+                            }
+                            WindowEvent::Resized(size) => runtime.resize(*size),
+                            _ => {}
+                        }
+                    }
+                },
+                
+                _ => {}
+                
+            }
+        }
+
+        let frame_start = Instant::now();
+
+        while let Ok(req) = runtime.render_resource_manager.main_exec_rx.try_recv() {
+            req();
+        }
+        runtime.update(dt, start);
+        last_render_time = frame_start;
+        dbg!(1. / dt.as_secs_f32());
         let since_start = frame_start - start;
         let since_start = since_start.as_secs_f32();
         if prev_full_sec != since_start as u64 {
-            //println!("fps: {}", 1. / dt.as_secs_f32());
             prev_full_sec = since_start as u64;
         }
 
@@ -373,9 +416,14 @@ pub async fn run() {
         if diff.is_positive() {
             spin_sleep::sleep(Duration::from_secs_f32(diff));
         }
+        dbg!("ran frame");
 
         #[cfg(not(feature = "prod"))]
         tracing_tracy::client::frame_mark();
+
+        if !should_run {
+            break
+        }
     }
 
     /*event_loop.run(move |event, _window_target, control_flow: &mut ControlFlow| {

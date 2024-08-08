@@ -16,14 +16,26 @@ use tokio::fs;
 use tokio::sync::RwLock;
 use wgpu::ShaderModuleDescriptor;
 
+enum FileResourceLoaderState {
+    LoadingFile,
+    RunningProcessor,
+    WaitingForCallbacks,
+}
+
 pub type SendEngineRuntime = Arc<RwLock<SendWrapper<EngineRuntime>>>;
 pub struct FileResourceLoader<T: FileLoadable + Future<Output = Box<dyn Any + Send>> + 'static> {
     pub path: &'static str,
     file_loader: BoxFuture<'static, tokio::io::Result<Vec<u8>>>,
-    loaded_file: bool,
+    state: FileResourceLoaderState,
     processor: T,
     engine: Lateinit<SendEngineRuntime>,
     thread_main_exec_tx: Lateinit<flume::Sender<Box<dyn Fn()>>>,
+    loaded_callback_tx: Lateinit<
+        flume::Sender<(
+            Box<dyn Fn()>,
+            Box<dyn Fn(Box<dyn Any + Send>, &'static mut EngineRuntime)>,
+        )>,
+    >,
 }
 
 impl<T: FileLoadable + 'static + Future<Output = Box<dyn Any + Send>> + Send + Unpin + Default>
@@ -34,10 +46,11 @@ impl<T: FileLoadable + 'static + Future<Output = Box<dyn Any + Send>> + Send + U
         Self {
             path,
             file_loader: fs::read(path).boxed(),
-            loaded_file: false,
+            state: FileResourceLoaderState::Start,
             processor: T::default(),
             engine: Default::default(),
             thread_main_exec_tx: Default::default(),
+            loaded_callback_tx: Default::default(),
         }
     }
 }
@@ -50,6 +63,15 @@ impl<T: FileLoadable + Future<Output = Box<dyn Any + Send>> + Send + Unpin + 'st
     }
     fn set_thread_main_exec(&mut self, tx: flume::Sender<Box<dyn Fn()>>) {
         self.thread_main_exec_tx.set(tx);
+    }
+    fn set_loaded_callback(
+        &mut self,
+        tx: flume::Sender<(
+            Box<dyn Fn()>,
+            Box<dyn Fn(Box<dyn Any + Send>, &'static mut EngineRuntime)>,
+        )>,
+    ) {
+        self.loaded_callback_tx.set(tx);
     }
 }
 
@@ -65,7 +87,7 @@ impl<T: FileLoadable + Future<Output = Box<dyn Any + Send>> + 'static + Send + U
         this.processor
             .set_thread_main_exec(this.thread_main_exec_tx.get().clone());
 
-        match this.loaded_file {
+        match this.state {
             true => {
                 match this.processor.poll_unpin(cx) {
                     Poll::Ready(x) => Poll::Ready(x),
@@ -89,6 +111,23 @@ impl<T: FileLoadable + Future<Output = Box<dyn Any + Send>> + 'static + Send + U
                     Poll::Pending
                 }
             },
+            FileResourceLoaderState::LoadingFile => match this.file_loader.poll_unpin(cx) {
+                Poll::Ready(x) => {
+                    cx.waker().wake_by_ref();
+                    this.processor.set_bytes(x);
+                    this.state = FileResourceLoaderState::RunningProcessor;
+                    Poll::Pending
+                }
+                Poll::Pending => {
+                    cx.waker().wake_by_ref();
+                    Poll::Pending
+                }
+            },
+            FileResourceLoaderState::RunningProcessor => match this.processor.poll_unpin(cx) {
+                Poll::Ready(x) => todo!(),
+                Poll::Pending => todo!(),
+            },
+            FileResourceLoaderState::WaitingForCallbacks => todo!(),
         }
     }
 }
