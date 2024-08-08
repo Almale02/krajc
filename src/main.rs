@@ -332,7 +332,9 @@ pub async fn run() {
         while let Ok(req) = runtime.render_resource_manager.main_exec_rx.try_recv() {
             req();
         }
-
+        while let Ok(req) = runtime.render_resource_manager.main_exec_rx.try_recv() {
+            req();
+        }
         event_loop.run_return(|event, _, control_flow_event| match event {
             Event::WindowEvent {
                 event: ref window_event,
