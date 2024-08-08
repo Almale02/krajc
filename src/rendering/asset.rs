@@ -8,7 +8,7 @@ use std::{
     task::{Context, Poll},
 };
 
-use futures::{future::BoxFuture, Future, FutureExt};
+use futures::Future;
 use tokio::sync::{RwLock, RwLockMappedWriteGuard, RwLockReadGuard, TryLockError};
 use uuid::Uuid;
 
@@ -28,8 +28,8 @@ pub struct AssetManager {
         &'static Arc<RwLock<AssetEntrie>>,
         Box<dyn AssetLoader<Output = Box<dyn Any + Send>>>,
     )>,
-    pub thread_main_exec_tx: flume::Sender<(Box<dyn Any + Send>, Box<dyn Fn(Box<dyn Any + Send>)>)>, //pub main_rx: flume::Receiver<(Uuid, Box<dyn Any + Send>)>,
-    pub main_exec_rx: flume::Receiver<(Box<dyn Any + Send>, Box<dyn Fn(Box<dyn Any + Send>)>)>, //pub thread_tx: flume::Sender<(Uuid, Box<dyn Any + Send>)>,
+    pub thread_main_exec_tx: flume::Sender<Box<dyn Fn()>>, //pub main_rx: flume::Receiver<(Uuid, Box<dyn Any + Send>)>,
+    pub main_exec_rx: flume::Receiver<Box<dyn Fn()>>, //pub thread_tx: flume::Sender<(Uuid, Box<dyn Any + Send>)>,
 }
 pub struct AssetEntrie {
     pub loaded: bool,
@@ -44,6 +44,12 @@ impl AssetEntrie {
             loaded: false,
             asset: None,
         }
+    }
+}
+
+impl Default for AssetEntrie {
+    fn default() -> Self {
+        Self::new()
     }
 }
 impl std::fmt::Debug for AssetEntrie {
@@ -62,6 +68,12 @@ impl<T> AssetEntrieTyped<T> {
             loaded: false,
             asset: None,
         }
+    }
+}
+
+impl<T> Default for AssetEntrieTyped<T> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -89,6 +101,7 @@ impl AssetManager {
         let uuid = Uuid::new_v4();
 
         loader.set_engine((*self.engine_locked).clone());
+        loader.set_thread_main_exec(self.thread_main_exec_tx.clone());
 
         self.assets
             .insert(uuid, Arc::new(RwLock::new(AssetEntrie::new())));
@@ -358,10 +371,7 @@ impl Future for AssetHandleUntype {
 
 pub trait AssetLoader: Unpin + Send + Future<Output = Box<dyn Any + Send>> {
     fn set_engine(&mut self, engine: SendEngineRuntime);
-    fn set_thread_main_exec(
-        &mut self,
-        tx: flume::Sender<(Box<dyn Any + Send>, Box<dyn Fn(Box<dyn Any + Send>)>)>,
-    );
+    fn set_thread_main_exec(&mut self, tx: flume::Sender<Box<dyn Fn()>>);
 }
 pub struct SendWrapper<T: 'static> {
     pub value: &'static mut T,

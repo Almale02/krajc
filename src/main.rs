@@ -11,9 +11,7 @@ use crate::rendering::systems::general::update_rendering;
 //pub type QueryFilter<A, B = Passthrough> = EntityFilterTuple<A, B>;
 
 use bevy_ecs::component::Component;
-use futures::{
-    future::join_all, stream::FuturesUnordered, FutureExt, StreamExt
-};
+use futures::{future::join_all, stream::FuturesUnordered, FutureExt, StreamExt};
 use krajc::system_fn;
 use physics::{
     components::{
@@ -34,40 +32,54 @@ use tokio::sync::RwLock;
 use typed_addr::{dupe, TypedAddr};
 
 use std::{
-    any::{type_name, Any}, collections::HashMap, hash::Hash, ops::{Deref, DerefMut}, sync::Arc, time::{Duration, Instant}
+    any::{type_name, Any},
+    collections::HashMap,
+    hash::Hash,
+    ops::{Deref, DerefMut},
+    sync::Arc,
+    task::{Context, Poll},
+    time::{Duration, Instant},
 };
 
 use cgmath::{num_traits::Signed, Deg, Point3, Rad, Vector3};
 
 use rapier3d::na::Vector3 as NaVec3;
 
+use engine_runtime::schedule_manager::runtime_schedule::RuntimePostUpdateSchedule;
 use engine_runtime::{
     schedule_manager::{
         runtime_schedule::{
-            RuntimePostPhysicsSyncSchedule,
-            RuntimeUpdateSchedule, RuntimeUpdateScheduleData,
+            RuntimePostPhysicsSyncSchedule, RuntimeUpdateSchedule, RuntimeUpdateScheduleData,
         },
-        system_params::{
-            system_local::Local,
-            system_query::EcsWorld,
-            system_resource::Res,
-        },
-    }, target_fps::TargetFps, EngineRuntime
+        system_params::{system_local::Local, system_query::EcsWorld, system_resource::Res},
+    },
+    target_fps::TargetFps,
+    EngineRuntime,
 };
-use engine_runtime::schedule_manager::runtime_schedule::RuntimePostUpdateSchedule;
 
 use ordered_float::OrderedFloat;
 use rendering::{
-    asset::{AssetEntrie, AssetLoader, SendWrapper}, asset_loaders::file_resource_loader::{FileResourceLoader, RawFileLoader, ShaderLoader}, buffer_manager::{managed_buffer::ManagedBufferGeneric, InstanceBufferType, UniformBufferType}, builtin_materials::{
+    asset::{AssetEntrie, AssetLoader, SendWrapper},
+    asset_loaders::file_resource_loader::{FileResourceLoader, RawFileLoader, ShaderLoader},
+    buffer_manager::{managed_buffer::ManagedBufferGeneric, InstanceBufferType, UniformBufferType},
+    builtin_materials::{
         light_material::material::update_light_material,
         texture_material::material::update_texture_material,
-    }, camera::camera::Camera, managers::RenderManagerResource, mesh::mesh::TextureVertexTemplates, systems::general::{
-        make_light_follow_camera, sync_light, Color, Light, Transform,
-    }
+    },
+    camera::camera::Camera,
+    managers::RenderManagerResource,
+    mesh::mesh::TextureVertexTemplates,
+    systems::general::{make_light_follow_camera, sync_light, Color, Light, Transform},
 };
 
 use wgpu::{BufferUsages, SurfaceError};
-use winit::{dpi::PhysicalSize, event::*, event_loop::{ControlFlow, EventLoop}, window::WindowBuilder};
+use winit::{
+    dpi::PhysicalSize,
+    event::*,
+    event_loop::{ControlFlow, EventLoop},
+    platform::run_return::EventLoopExtRunReturn,
+    window::WindowBuilder,
+};
 
 use crate::engine_runtime::schedule_manager::runtime_schedule::RuntimeEngineLoadSchedule;
 
@@ -96,8 +108,12 @@ pub struct TextureMaterialMarker;
 pub struct LightMaterialMarker;
 
 #[system_fn(RuntimeEngineLoadSchedule)]
-fn startup(mut world: EcsWorld, mut render: Res<RenderManagerResource>, mut gravity: Res<Gravity>, mut target_fps: Res<TargetFps>) {
-
+fn startup(
+    mut world: EcsWorld,
+    mut render: Res<RenderManagerResource>,
+    mut gravity: Res<Gravity>,
+    mut target_fps: Res<TargetFps>,
+) {
     target_fps.0 = 90.;
     gravity.0 = NaVec3::new(0.04, -0.5, 0.);
     dbg!("ran startup");
@@ -190,8 +206,10 @@ fn fps_logger(update: Res<RuntimeUpdateScheduleData>, mut prev_full_sec: Local<u
 pub async fn run() {
     let runtime = EngineRuntime::init();
 
-    let thread_rx: flume::Receiver<(&'static std::sync::Arc<tokio::sync::RwLock<AssetEntrie>>, Box<dyn AssetLoader<Output = Box<dyn Any + Send>>>)> =
-        runtime.render_resource_manager.thread_rx.clone();
+    let thread_rx: flume::Receiver<(
+        &'static std::sync::Arc<tokio::sync::RwLock<AssetEntrie>>,
+        Box<dyn AssetLoader<Output = Box<dyn Any + Send>>>,
+    )> = runtime.render_resource_manager.thread_rx.clone();
     let handle = std::thread::spawn(move || {
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
@@ -215,13 +233,20 @@ pub async fn run() {
                     Some(_) = futures.next() => {},
                 };
             }
-            
         });
     });
 
     runtime.buffer_manager.engine = unsafe { ENGINE_RUNTIME.get() };
-    runtime.render_resource_manager.engine.set( unsafe { ENGINE_RUNTIME.get() });
-    runtime.render_resource_manager.engine_locked.set(Arc::new(RwLock::new(SendWrapper::new(unsafe {ENGINE_RUNTIME.get()}))));
+    runtime
+        .render_resource_manager
+        .engine
+        .set(unsafe { ENGINE_RUNTIME.get() });
+    runtime
+        .render_resource_manager
+        .engine_locked
+        .set(Arc::new(RwLock::new(SendWrapper::new(unsafe {
+            ENGINE_RUNTIME.get()
+        }))));
     dupe(runtime)
         .buffer_manager
         .register_new_buffer_type::<UniformBufferType>();
@@ -232,7 +257,7 @@ pub async fn run() {
     let render_states = runtime.get_resource_mut::<RenderManagerResource>();
     let render = TypedAddr::new_with_ref(render_states);
 
-    let event_loop = EventLoop::new();
+    let mut event_loop = EventLoop::new();
     let window = WindowBuilder::new()
         .with_inner_size(PhysicalSize::new(700, 700))
         .build(&event_loop)
@@ -283,55 +308,77 @@ pub async fn run() {
 
     //render_states.material.register_systems(runtime);
 
-    
-    let shader_res = 
-        runtime
+    let mut shader_res = runtime
         .render_resource_manager
         .load_resource(FileResourceLoader::<ShaderLoader>::new(
-            "resources/shaders/shader_light.wgsl"
-        
+            "resources/shaders/shader_light.wgsl",
         ));
-    let shader_res2 = 
-        runtime
-        .render_resource_manager
-        .load_resource(FileResourceLoader::<ShaderLoader>::new(
-            "resources/shaders/shader_light.wgsl"
-        
-        ));
-    let shader_res3 = 
-        runtime
-        .render_resource_manager
-        .load_resource(FileResourceLoader::<ShaderLoader>::new(
-            "resources/shaders/shader_light.wgsl"
-        
-        ));
-    let shader_res4 = 
-        runtime
-        .render_resource_manager
-        .load_resource(FileResourceLoader::<ShaderLoader>::new(
-            "resources/shaders/shader_light.wgsl"
-        
-        ));
-    dbg!(shader_res.await.is_loaded().await);
-    dbg!(shader_res2.await.is_loaded().await);
-    dbg!(shader_res3.await.is_loaded().await);
-    dbg!(shader_res4.await.is_loaded().await);
-    /*let assets = join_all(runtime.render_resource_manager.load_resource_bulk(vec![
-        FileResourceLoader::<ShaderLoader>::new(
-                "resources/shaders/shader_light.wgsl"),
-        FileResourceLoader::<ShaderLoader>::new(
-                "resources/shaders/shader_light.wgsl"),
-        FileResourceLoader::<ShaderLoader>::new(
-                "resources/shaders/shader_light.wgsl"),
-        FileResourceLoader::<ShaderLoader>::new(
-                "resources/shaders/shader_light.wgsl"),
-    ])).await;
 
-    for i in assets {
-        dbg!(i.is_loaded().await);
-    }*/
+    //let mut finished = false;
 
-    event_loop.run(move |event, _window_target, control_flow: &mut ControlFlow| {
+    //let mut cx = Context::from_waker(futures::task::noop_waker_ref());
+    let control_flow = ControlFlow::Poll;
+
+    loop {
+        let mut events = Vec::new();
+        let mut scale_factor_changed: Option<PhysicalSize<u32>> = None;
+
+        event_loop.run_return(
+            |general_event, _, _control_flow_event| match general_event {
+                Event::WindowEvent { ref event, .. } => match event {
+                    WindowEvent::ScaleFactorChanged {
+                        scale_factor,
+                        new_inner_size,
+                    } => scale_factor_changed = Some(**new_inner_size),
+                    _ => events.push(general_event.to_static().unwrap()),
+                },
+                _ => events.push(general_event.to_static().unwrap().clone()),
+            },
+        );
+
+        let frame_start = Instant::now();
+
+        dbg!(shader_res.try_is_loaded());
+        while let Ok(req) = runtime.render_resource_manager.main_exec_rx.try_recv() {
+            req();
+        }
+        //runtime.update(dt, start);
+        //last_render_time = frame_start;
+        //dbg!(1. / dt.as_secs_f32());
+        let since_start = frame_start - start;
+        let since_start = since_start.as_secs_f32();
+        if prev_full_sec != since_start as u64 {
+            //println!("fps: {}", 1. / dt.as_secs_f32());
+            prev_full_sec = since_start as u64;
+        }
+
+        span!(trace_render, "rendering");
+        match runtime.render() {
+            Ok(_) => {}
+            Err(SurfaceError::Lost) => runtime.resize(*render.get().size),
+            Err(SurfaceError::Outdated) => break,
+            Err(e) => eprintln!("{:?}", e),
+        }
+        drop_span!(trace_render);
+
+        let target_fps = runtime.get_resource::<TargetFps>();
+
+        // added 10 to it because it looks like atleaset on my computer that it slows it too much down by around 10 fps
+        let target_frame_time = 1. / (target_fps.0 + 10.);
+
+        let current_frame_time = frame_start.elapsed().as_secs_f32();
+
+        let diff = target_frame_time - current_frame_time;
+
+        if diff.is_positive() {
+            spin_sleep::sleep(Duration::from_secs_f32(diff));
+        }
+
+        #[cfg(not(feature = "prod"))]
+        tracing_tracy::client::frame_mark();
+    }
+
+    /*event_loop.run(move |event, _window_target, control_flow: &mut ControlFlow| {
         span!(trace_loop, "event loop");
 
         match event {
@@ -343,11 +390,12 @@ pub async fn run() {
 
                 //dbg!(shader_res.try_is_loaded().unwrap());
 
+                dbg!(shader_res.try_is_loaded());
                 while let Ok(req) = runtime.render_resource_manager.main_exec_rx.try_recv() {
-                    req.1(req.0);
+                    req();
                 }
 
-                
+
                 //runtime.update(dt, start);
                 last_render_time = frame_start;
                 //dbg!(1. / dt.as_secs_f32());
@@ -389,7 +437,7 @@ pub async fn run() {
             } => {
                 render.get().camera_controller.deref_mut().process_mouse(delta.0, delta.1);
 
-                
+
 
             }
 
@@ -420,8 +468,8 @@ pub async fn run() {
             }
             _ => {}
         };
-    }
-)}
+    }*/
+}
 
 mod key_macros {
     #[macro_export]
@@ -643,7 +691,9 @@ unsafe impl<T> Send for Lateinit<T> {}
 
 impl<T> Lateinit<T> {
     pub fn new(data: T) -> Self {
-        Self {value: LateinitEnum::Some(data)}
+        Self {
+            value: LateinitEnum::Some(data),
+        }
     }
     fn set(&mut self, value: T) {
         self.value = LateinitEnum::<T>::Some(value);
@@ -672,7 +722,6 @@ impl<T> Lateinit<T> {
         }
     }
     pub fn get(&self) -> &T {
-        
         match &self.value {
             LateinitEnum::Some(value) => value,
             LateinitEnum::Uninited => {
@@ -684,7 +733,6 @@ impl<T> Lateinit<T> {
         }
     }
     pub fn get_mut(&mut self) -> &mut T {
-        
         match &mut self.value {
             LateinitEnum::Some(value) => value,
             LateinitEnum::Uninited => {
