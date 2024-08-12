@@ -4,6 +4,7 @@ use std::{
 };
 
 use engine_cache::engine_cache::EngineCache;
+use schedule_manager::schedule::{Schedule, ScheduleRunnable};
 
 use crate::{
     ecs::ecs_manager::EcsManager,
@@ -73,6 +74,12 @@ impl EngineRuntime {
     }
     pub fn get_resource_no_init<T: EngineResource>(&self) -> &'static T {
         T::get(dupe(self))
+    }
+    pub fn register_system<T: Schedule>(&mut self, system: impl ScheduleRunnable + 'static) {
+        self.get_resource_mut::<T>().register(system);
+    }
+    pub fn register_system_dyn<T: Schedule>(&mut self, system: impl ScheduleRunnable + 'static) {
+        self.get_resource_mut::<T>().register_dyn(Box::new(system));
     }
 }
 #[derive(Default)]

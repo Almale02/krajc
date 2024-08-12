@@ -2,18 +2,20 @@ use wgpu::{IndexFormat, RenderPass};
 
 use crate::{engine_runtime::EngineRuntime, typed_addr::dupe};
 
-use super::{
-    asset::{AssetHandle, AssetHandleUntype},
-    material::MaterialGeneric,
-};
+use super::{asset::AssetHandleUntype, material::MaterialGeneric};
 
 pub struct DrawPass {
     pub mat: Box<dyn MaterialGeneric>,
     pub res_handles: Vec<AssetHandleUntype>,
 }
 impl DrawPass {
+    pub fn new(mat: Box<dyn MaterialGeneric>, res_handles: Vec<AssetHandleUntype>) -> Self {
+        Self { mat, res_handles }
+    }
+
     pub fn is_loaded(&self) -> bool {
         for x in self.res_handles.iter() {
+            dbg!(x.is_loaded());
             if !x.is_loaded() {
                 return false;
             }

@@ -6,6 +6,7 @@ use crate::{
     engine_runtime::{
         schedule_manager::{
             runtime_schedule::RuntimePhysicsSyncMainSchedule,
+            schedule::IntoSystem,
             system_params::{system_query::SystemQuery, system_resource::Res},
         },
         EngineRuntime,
@@ -41,5 +42,5 @@ pub fn handle_collider_insert(
 }
 
 pub fn collider_systems(runtime: &mut EngineRuntime) {
-    handle_collider_insert!(runtime);
+    runtime.register_system::<RuntimePhysicsSyncMainSchedule>(handle_collider_insert.into_system());
 }

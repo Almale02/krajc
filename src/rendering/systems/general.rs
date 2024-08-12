@@ -1,13 +1,8 @@
 use std::ops::Deref;
 use std::ops::DerefMut;
-use std::ops::Neg;
 
-use crate::engine_runtime::schedule_manager::runtime_schedule::RuntimePhysicsSyncMainSchedule;
-use crate::engine_runtime::schedule_manager::system_params::system_local::Local;
 use crate::engine_runtime::schedule_manager::system_params::system_query::SystemQuery;
 use crate::physics::components::general::LinearVelocity;
-use crate::physics::components::general::RigidBody;
-use crate::physics::components::general::RigidBodyHandle;
 use crate::rendering::camera::camera::Camera;
 use crate::RenderManagerResource;
 use crate::RuntimeUpdateScheduleData;
@@ -16,8 +11,6 @@ use crate::TextureMaterialMarker;
 use bevy_ecs::component::Component;
 use bevy_ecs::entity::Entity;
 use bevy_ecs::query::With;
-use bevy_ecs::query::Without;
-use cgmath::Rotation3;
 //use cgmath::Vector3;
 use krajc::system_fn;
 //use krajc::system_fn;

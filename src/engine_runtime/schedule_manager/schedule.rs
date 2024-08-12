@@ -1,20 +1,12 @@
-use std::{
-    any::Any,
-    collections::{HashMap, HashSet},
-    thread,
-};
-
-use bevy_ecs::intern::Internable;
-use bytemuck::Contiguous;
-use tracing_tracy::client::{internal::Lazy, SpanLocation};
+use std::collections::{HashMap, HashSet};
 
 use crate::{
     engine_runtime::{schedule_manager::runtime_schedule::IterExt, EngineRuntime},
-    typed_addr::{dupe, TypedAddr},
-    Lateinit, ThreadRawPointer, ENGINE_RUNTIME,
+    typed_addr::dupe,
+    ThreadRawPointer,
 };
 
-use super::system_params::system_param::SystemParalellFilter;
+use super::system_params::{system_param::SystemParalellFilter, system_resource::EngineResource};
 
 pub trait ScheduleRunnable {
     fn run(&mut self, runtime: &'static mut EngineRuntime);
@@ -24,40 +16,58 @@ pub trait ScheduleRunnable {
     fn get_params_filters(&self) -> &Vec<Box<dyn SystemParalellFilter>>;
 }
 
+pub trait IntoSystem<Marker> {
+    fn into_system(self) -> impl ScheduleRunnable;
+}
+
+#[macro_export]
+macro_rules! implement_into_system {
+    ($($param:ident),*) => {
+        impl<Func, $($param),*> IntoSystem<fn($($param), *)>
+            for Func
+        where
+            $($param: From<SystemParam> + IntoSystemParalellFilter + 'static),*,
+            Func: Fn($($param), *) + 'static,
+        {
+            fn into_system(self) -> impl ScheduleRunnable {
+                FunctionSystem::new(self)
+            }
+        }
+    };
+}
+
 pub fn single_thread_scheduler(
     engine: &'static mut EngineRuntime,
     actions: &mut Vec<Box<dyn ScheduleRunnable>>,
 ) {
     for action in actions.iter_mut() {
-        let name = action.name();
-
         action.run(dupe(engine));
     }
-    let thread_num = thread::available_parallelism().unwrap().into_integer() - 1;
     //dbg!(thread_num);
 }
+
+pub trait Schedule: EngineResource + 'static {
+    fn execute(&'static mut self, engine: &'static mut EngineRuntime);
+
+    fn register_dyn(&mut self, action: Box<dyn ScheduleRunnable>);
+    fn register(&mut self, action: impl ScheduleRunnable + 'static);
+}
+
 #[macro_export]
 macro_rules! implement_schedule {
     ($type: ty) => {
         #[allow(unused_imports)]
         use $crate::engine_runtime::schedule_manager::schedule::*;
 
-        impl $type {
-            pub fn new(name: &str) -> Self {
-                Self {
-                    schedule_name: name.to_string(),
-                    actions: Vec::default(),
-                    dep_graph: DepGraph::default(),
-                }
+        impl $crate::engine_runtime::schedule_manager::schedule::Schedule for $type {
+            fn register_dyn(&mut self, action: Box<dyn ScheduleRunnable>) {
+                self.actions.push(action);
             }
-            pub fn calc_dep_graph(&'static mut self, engine: &mut EngineRuntime) {
-                let start = std::time::Instant::now();
-                self.dep_graph = calc_dep_graph(&mut self.actions, dupe(engine));
-                dbg!(start.elapsed());
+            fn register(&mut self, action: impl ScheduleRunnable + 'static) {
+                self.register_dyn(Box::new(action) as Box<dyn ScheduleRunnable>);
             }
 
-            #[allow(unused_assignments)]
-            pub fn execute(&'static mut self, engine: &'static mut EngineRuntime) {
+            fn execute(&'static mut self, engine: &'static mut EngineRuntime) {
                 $crate::span!(trace_exec, stringify!($type));
 
                 if !engine.paralellism {
@@ -133,6 +143,7 @@ macro_rules! implement_schedule {
                                     for _i in 0..thread_num {
                                         main_tx.send(MainToThreadExecutorMsg::Kill).unwrap();
                                     }
+                                    #[allow(unused_assignments)]
                                     shall_run = false;
                                     break;
                                 }
@@ -175,8 +186,28 @@ macro_rules! implement_schedule {
                 $crate::drop_span!(trace_start_main_thread);
                 $crate::drop_span!(trace_start_exec);
             }
-            pub fn register(&mut self, action: Box<dyn ScheduleRunnable>) {
+        }
+
+        impl $type {
+            pub fn new(name: &str) -> Self {
+                Self {
+                    schedule_name: name.to_string(),
+                    actions: Vec::default(),
+                    dep_graph: DepGraph::default(),
+                }
+            }
+            pub fn calc_dep_graph(&'static mut self, engine: &mut EngineRuntime) {
+                let start = std::time::Instant::now();
+                self.dep_graph = calc_dep_graph(&mut self.actions, dupe(engine));
+                dbg!(start.elapsed());
+            }
+
+            #[allow(unused_assignments)]
+            pub fn register_dyn(&mut self, action: Box<dyn ScheduleRunnable>) {
                 self.actions.push(action);
+            }
+            pub fn register(&mut self, action: impl ScheduleRunnable + 'static) {
+                self.register_dyn(Box::new(action) as Box<dyn ScheduleRunnable>);
             }
         }
         unsafe impl Send for $type {}
@@ -257,6 +288,7 @@ macro_rules! span {
     };
     ($var: ident, $name: expr) => {
         #[cfg(not(feature = "prod"))]
+        #[allow(unused_variables)]
         let $var = $crate::span!($name);
     };
 }
@@ -284,6 +316,19 @@ macro_rules! drop_span {
 #[macro_export]
 macro_rules! implement_schedule_main {
     ($type: ty, $data: ty) => {
+        impl $crate::engine_runtime::schedule_manager::schedule::Schedule for $type {
+            fn execute(&'static mut self, engine: &'static mut EngineRuntime) {
+                $crate::span!(trace_exec, stringify!($type));
+                //dbg!(engine.paralellism);
+                single_thread_scheduler(engine, &mut self.actions);
+            }
+            fn register_dyn(&mut self, action: Box<dyn ScheduleRunnable>) {
+                self.actions.push(action);
+            }
+            fn register(&mut self, action: impl ScheduleRunnable + 'static) {
+                self.register_dyn(Box::new(action) as Box<dyn ScheduleRunnable>);
+            }
+        }
         impl $type {
             pub fn new(name: &str, schedule_state: $data) -> Self {
                 Self {
@@ -291,14 +336,6 @@ macro_rules! implement_schedule_main {
                     actions: Vec::default(),
                     schedule_state,
                 }
-            }
-            pub fn execute(&'static mut self, engine: &'static mut EngineRuntime) {
-                $crate::span!(trace_exec, stringify!($type));
-                //dbg!(engine.paralellism);
-                single_thread_scheduler(engine, &mut self.actions);
-            }
-            pub fn register(&mut self, action: Box<dyn ScheduleRunnable>) {
-                self.actions.push(action);
             }
         }
     };
@@ -310,11 +347,6 @@ pub fn calc_dep_graph(
     Vec<(usize, std::collections::HashSet<usize>)>,
     HashMap<usize, &'static Box<dyn ScheduleRunnable>>,
 ) {
-    /*let mut paralell_systems = ScheduleParalellizationData::default();
-    for (i, action) in &mut dupe(systems).iter().enumerate() {
-        paralell_systems.add_new(i, action);
-    }*/
-
     let mut ids: HashMap<usize, &Box<dyn ScheduleRunnable>> = HashMap::default();
 
     let mut groups: Vec<HashSet<usize>> = Vec::default();

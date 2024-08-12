@@ -3,8 +3,8 @@ use bytemuck::Contiguous;
 use std::thread;
 
 use crate::{
-    create_schedule, create_schedule_main, generate_state_struct_non_resource,
-    implement_schedule_main, span, typed_addr::dupe, ThreadRawPointer,
+    create_schedule, create_schedule_main, implement_schedule_main, typed_addr::dupe,
+    ThreadRawPointer,
 };
 use std::{
     collections::{HashMap, HashSet},

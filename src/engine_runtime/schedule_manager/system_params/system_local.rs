@@ -36,7 +36,7 @@ impl<T: Default> From<SystemParam> for Local<T> {
 
 struct LocalFilterable {}
 impl SystemParalellFilter for LocalFilterable {
-    fn filter_against_param(&self, param: &Box<(dyn SystemParalellFilter + 'static)>) -> bool {
+    fn filter_against_param(&self, _param: &Box<(dyn SystemParalellFilter + 'static)>) -> bool {
         true
     }
 }

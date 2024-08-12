@@ -1,11 +1,6 @@
-use std::ops::DerefMut;
-
 use wgpu::*;
 
-use crate::{
-    drop_span, engine_runtime::EngineRuntime, rendering::material::MaterialGeneric, span,
-    typed_addr::dupe, ENGINE_RUNTIME,
-};
+use crate::{drop_span, engine_runtime::EngineRuntime, span, typed_addr::dupe};
 
 use super::RenderManagerResource;
 
@@ -50,11 +45,12 @@ impl EngineRuntime {
             timestamp_writes: None,
         });
 
-        for draw_pass in state.draw_passes.iter_mut() {
+        for draw_pass in dupe(state).draw_passes.iter_mut() {
             if draw_pass.is_loaded() {
                 draw_pass.draw(&mut render_pass, dupe(self));
             }
         }
+        state.draw_passes.clear();
         span!(trace_light_material, "light_material");
 
         drop_span!(trace_render_pass);

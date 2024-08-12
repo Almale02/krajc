@@ -3,15 +3,12 @@ use wgpu::*;
 
 use crate::{
     engine_runtime::schedule_manager::system_params::system_resource::EngineResource,
-    generate_state_struct, InstanceBufferType, Lateinit, UniformBufferType,
+    InstanceBufferType, Lateinit, UniformBufferType,
 };
 
 use super::{
     buffer_manager::managed_buffer::ManagedBufferInstanceHandle,
-    builtin_materials::{
-        light_material::material::{LightMaterial, LightUniform},
-        texture_material::material::TextureMaterial,
-    },
+    builtin_materials::light_material::material::LightUniform,
     camera::camera::{CameraController, CameraUniform, Projection},
     draw_pass::DrawPass,
     texture::texture::Texture,
@@ -57,10 +54,7 @@ pub struct RenderManagerResource {
 
     pub clear_color: Lateinit<Color>,
 
-    pub texture_material: Lateinit<TextureMaterial>,
-    pub light_material: Lateinit<LightMaterial>,
-
-    pub draw_passes: Vec<DrawPass>,
+    pub draw_passes: Vec<&'static mut DrawPass>,
 }
 impl Clone for RenderManagerResource {
     fn clone(&self) -> Self {

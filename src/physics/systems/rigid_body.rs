@@ -11,6 +11,7 @@ use crate::{
     engine_runtime::{
         schedule_manager::{
             runtime_schedule::RuntimePhysicsSyncMainSchedule,
+            schedule::IntoSystem,
             system_params::{
                 system_query::{EcsWorld, SystemQuery},
                 system_resource::Res,
@@ -25,7 +26,6 @@ use crate::{
             TargetKinematicTransform, TargetKinematicVelocity,
         },
         physics_world::{PhysicsMappings, PhysicsWorld},
-        systems::collider::collider_systems,
         Gravity,
     },
     rendering::systems::general::Transform,
@@ -197,9 +197,7 @@ pub fn sync_physics_direct_transform_modification(
 }
 
 #[system_fn(RuntimePhysicsSyncMainSchedule)]
-pub fn mark_static_bodies_trans_changed(
-    mut query: SystemQuery<&mut Transform, With<FixedRigidBody>>,
-) {
+fn mark_static_bodies_trans_changed(mut query: SystemQuery<&mut Transform, With<FixedRigidBody>>) {
     for mut trans in query.iter_mut() {
         let _ = trans.deref_mut();
     }
@@ -229,18 +227,19 @@ pub fn sync_lin_vel_to_physics(
     }
 }
 
+#[rustfmt::skip]
 pub fn physics_systems(runtime: &mut EngineRuntime) {
-    sync_physics_transform!(runtime);
-    sync_fixed_bodies_to_rapier!(runtime);
-    handle_rigidbody_insert!(runtime);
-    sync_target_transform_kinematic_body!(runtime);
-    sync_target_vel_kinematic_body!(runtime);
-    sync_physics_direct_transform_modification!(runtime);
+    runtime.register_system::<RuntimePhysicsSyncMainSchedule>(sync_physics_transform.into_system());
+    runtime.register_system::<RuntimePhysicsSyncMainSchedule>(sync_fixed_bodies_to_rapier.into_system());
+    runtime.register_system::<RuntimePhysicsSyncMainSchedule>(handle_rigidbody_insert.into_system());
+    runtime.register_system::<RuntimePhysicsSyncMainSchedule>(sync_target_transform_kinematic_body.into_system());
+    runtime.register_system::<RuntimePhysicsSyncMainSchedule>(sync_target_vel_kinematic_body.into_system());
+    runtime.register_system::<RuntimePhysicsSyncMainSchedule>(sync_physics_direct_transform_modification.into_system());
 
-    sync_ang_vel_to_physics!(runtime);
-    sync_lin_vel_to_physics!(runtime);
+    runtime.register_system::<RuntimePhysicsSyncMainSchedule>(sync_ang_vel_to_physics.into_system());
+    runtime.register_system::<RuntimePhysicsSyncMainSchedule>(sync_lin_vel_to_physics.into_system());
 
-    collider_systems(runtime);
+    runtime.register_system::<RuntimePhysicsSyncMainSchedule>(mark_static_bodies_trans_changed.into_system());
 
-    mark_static_bodies_trans_changed!(runtime);
+    //collider_systems(runtime);
 }

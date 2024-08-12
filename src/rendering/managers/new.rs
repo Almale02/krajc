@@ -1,35 +1,17 @@
-use std::ops::Deref;
+use cgmath::Vector3;
 
-use cgmath::{Vector3, Zero};
-use image::GenericImageView;
-
-use wgpu::{
-    util::{BufferInitDescriptor, DeviceExt},
-    *,
-};
+use wgpu::*;
 use winit::window::Window;
 
 use crate::{
     engine_runtime::EngineRuntime,
     rendering::{
-        asset_loaders::file_resource_loader::{FileResourceLoader, RawFileLoader},
-        buffer_manager::managed_buffer::{ManagedBufferGeneric, ManagedBufferInstanceHandle},
-        builtin_materials::{
-            light_material::{
-                instance_data::{LightMaterialInstance, RawLightMaterialInstance},
-                material::{LightMaterial, LightUniform},
-            },
-            texture_material::{
-                instance_data::{RawTextureMaterialInstance, TextureMaterialInstance},
-                material::TextureMaterial,
-            },
-        },
+        buffer_manager::managed_buffer::ManagedBufferInstanceHandle,
+        builtin_materials::light_material::material::LightUniform,
         camera::camera::{CameraController, CameraUniform, Projection},
-        mesh::mesh::TextureVertex,
         texture::texture::Texture,
     },
-    typed_addr::dupe,
-    InstanceBufferType, UniformBufferType, Vec3,
+    InstanceBufferType, UniformBufferType,
 };
 
 use super::RenderManagerResource;
@@ -186,20 +168,6 @@ impl EngineRuntime {
         render_state.light_uniform.set(light_uniform);
         render_state.light_buffer.set(light_buffer);
 
-        render_state
-            .light_material
-            .set(LightMaterial::from_engine(dupe(self)));
-        render_state
-            .texture_material
-            .set(TextureMaterial::from_engine(dupe(self)));
-
         dbg!(render_state.light_instance_buffer.get_buffer().size());
-
-        render_state
-            .light_material
-            .set_instance(render_state.light_instance_buffer.deref().clone());
-        render_state
-            .texture_material
-            .set_instance(render_state.texture_instance_buffer.deref().clone());
     }
 }

@@ -1,63 +1,88 @@
 use std::{
     any::Any,
     boxed::Box,
+    cell::UnsafeCell,
     collections::HashMap,
     marker::{PhantomData, Send},
     pin::Pin,
-    sync::Arc,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
     task::{Context, Poll},
 };
 
+use bevy_ecs::ptr::UnsafeCellDeref;
 use futures::Future;
-use tokio::sync::{RwLock, RwLockMappedWriteGuard, RwLockReadGuard, TryLockError};
 use uuid::Uuid;
 
-use crate::{engine_runtime::EngineRuntime, typed_addr::dupe, Lateinit};
+use crate::{engine_runtime::EngineRuntime, typed_addr::dupe, FromEngine, Lateinit};
 
 use super::asset_loaders::file_resource_loader::SendEngineRuntime;
 
 pub struct AssetManager {
     pub engine: Lateinit<&'static mut EngineRuntime>,
     pub engine_locked: Lateinit<SendEngineRuntime>,
-    pub assets: HashMap<Uuid, Arc<RwLock<AssetEntrie>>>,
+    pub assets: HashMap<Uuid, Arc<AssetEntrie>>,
     pub main_tx: flume::Sender<(
-        &'static Arc<RwLock<AssetEntrie>>,
+        Arc<AssetEntrie>,
         Box<dyn AssetLoader<Output = Box<dyn Any + Send>>>,
     )>,
     pub thread_rx: flume::Receiver<(
-        &'static Arc<RwLock<AssetEntrie>>,
+        Arc<AssetEntrie>,
         Box<dyn AssetLoader<Output = Box<dyn Any + Send>>>,
     )>,
     pub thread_main_exec_tx: flume::Sender<Box<dyn Fn()>>, //pub main_rx: flume::Receiver<(Uuid, Box<dyn Any + Send>)>,
     pub main_exec_rx: flume::Receiver<Box<dyn Fn()>>, //pub thread_tx: flume::Sender<(Uuid, Box<dyn Any + Send>)>,
     pub loaded_callback_tx: flume::Sender<(
-        Box<dyn Fn()>,
-        Box<dyn Fn(Box<dyn Any + Send>, &'static mut EngineRuntime)>,
+        AssetHandleUntype,
+        fn(),
+        fn(AssetHandleUntype, &'static mut EngineRuntime),
     )>,
     pub loaded_callback_rx: flume::Receiver<(
-        Box<dyn Fn()>,
-        Box<dyn Fn(Box<dyn Any + Send>, &'static mut EngineRuntime)>,
+        AssetHandleUntype,
+        fn(),
+        fn(AssetHandleUntype, &'static mut EngineRuntime),
     )>,
 }
 pub struct AssetEntrie {
-    pub loaded: bool,
-    pub asset: Option<Box<dyn Any + Send>>,
+    pub loaded: AtomicBool,
+    /// an asset could only be modifed if it is marked as *unloaded*, if it is unloaded then it *cannot* be read,
+    /// the library which allow the users to use AssetHandles need to ensure that if the asset is marked as unloaded, then it wont run their code that could use those assets.
+    /// and the users of those libraries needs to register their [`AssetHandle`s] to the library as an [AssetHandleUntype]
+    /// take a look at [super::draw_pass::DrawPass] for example of this
+    pub asset: UnsafeCell<Box<dyn Any + Send>>,
+    pub callbacks: Vec<fn(AssetHandleUntype, &'static mut EngineRuntime)>,
+    pub uuid: Uuid,
 }
 unsafe impl Send for AssetEntrie {}
 unsafe impl Sync for AssetEntrie {}
 
 impl AssetEntrie {
-    pub fn new() -> Self {
+    pub fn new(
+        uuid: Uuid,
+        callbacks: Vec<fn(AssetHandleUntype, &'static mut EngineRuntime)>,
+    ) -> Self {
         Self {
-            loaded: false,
-            asset: None,
+            loaded: false.into(),
+            asset: UnsafeCell::new(Box::new(0_u8)),
+            callbacks: Vec::default().into(),
+            uuid: Uuid::default(),
         }
+    }
+    /// asset could only be modified if it is marked as unloaded, this is to prevent reading the value while it is being modified.
+    pub fn get_mut(&self) -> Option<&'static mut Box<dyn Any + Send>> {
+        if self.loaded.load(Ordering::SeqCst) {
+            println!("asset is not marked as being unloaded!");
+            return None;
+        }
+        Some(unsafe { dupe(self).asset.deref_mut() })
     }
 }
 
 impl Default for AssetEntrie {
     fn default() -> Self {
-        Self::new()
+        Self::new(Uuid::default(), Vec::default())
     }
 }
 impl std::fmt::Debug for AssetEntrie {
@@ -91,6 +116,7 @@ impl AssetManager {
         //let (thread_tx, main_rx) = flume::unbounded();
 
         let (thread_main_exec_tx, main_exec_rx) = flume::unbounded();
+        let (loaded_callback_tx, loaded_callback_rx) = flume::unbounded();
         Self {
             engine: Lateinit::default(),
             assets: HashMap::default(),
@@ -99,29 +125,33 @@ impl AssetManager {
             engine_locked: Default::default(),
             thread_main_exec_tx,
             main_exec_rx,
+            loaded_callback_tx,
+            loaded_callback_rx,
         }
     }
 
-    pub fn load_resource<T: AssetLoader<Output = Box<dyn Any + Send>> + 'static>(
+    pub fn load_resource<T: AssetLoader<Output = Box<dyn Any + Send>> + FinalAsset + 'static>(
         &mut self,
         mut loader: T,
-        callbacks: Vec<Box<dyn Fn(Box<dyn Any + Send>, &'static mut EngineRuntime)>>,
-    ) -> AssetHandle<T> {
+        callbacks: Vec<fn(AssetHandleUntype, &'static mut EngineRuntime)>,
+    ) -> AssetHandle<<T as FinalAsset>::FinalAsset> {
         let uuid = Uuid::new_v4();
 
         loader.set_engine((*self.engine_locked).clone());
         loader.set_thread_main_exec(self.thread_main_exec_tx.clone());
-        loader.set_loaded_callback(self.loaded_callback_tx.clone());
 
         self.assets
-            .insert(uuid, Arc::new(RwLock::new(AssetEntrie::new())));
+            .insert(uuid, Arc::new(AssetEntrie::new(uuid, callbacks)));
 
         self.main_tx
-            .send((dupe(self).assets.get(&uuid).unwrap(), Box::new(loader)))
+            .send((
+                dupe(self).assets.get(&uuid).unwrap().clone(),
+                Box::new(loader),
+            ))
             .unwrap();
         AssetHandle::new(uuid, dupe(self))
     }
-    pub fn load_resource_bulk<T: AssetLoader<Output = Box<dyn Any + Send>> + 'static>(
+    /*pub fn load_resource_bulk<T: AssetLoader<Output = Box<dyn Any + Send>> + 'static>(
         &mut self,
         loaders: Vec<T>,
     ) -> Vec<AssetHandle<T>> {
@@ -140,7 +170,7 @@ impl AssetManager {
                 AssetHandle::new(uuid, dupe(self))
             })
             .collect()
-    }
+    }*/
 }
 
 impl Default for AssetManager {
@@ -152,6 +182,15 @@ pub struct AssetHandle<T> {
     pub uuid: Uuid,
     manager: &'static mut AssetManager,
     _p: PhantomData<T>,
+}
+impl<T> FromEngine for AssetHandle<T> {
+    fn from_engine(engine: &'static mut EngineRuntime) -> Self {
+        Self {
+            uuid: Uuid::default(),
+            manager: &mut engine.render_resource_manager,
+            _p: PhantomData,
+        }
+    }
 }
 
 impl<T> Clone for AssetHandle<T> {
@@ -165,6 +204,9 @@ impl<T> Clone for AssetHandle<T> {
 }
 
 impl<T: 'static> AssetHandle<T> {
+    pub fn as_untype(&self) -> AssetHandleUntype {
+        AssetHandleUntype::new(self.uuid, dupe(self.manager))
+    }
     pub fn new(uuid: Uuid, manager: &'static mut AssetManager) -> Self {
         Self {
             uuid,
@@ -172,122 +214,56 @@ impl<T: 'static> AssetHandle<T> {
             _p: PhantomData,
         }
     }
-    pub async fn is_loaded(&self) -> bool {
+    pub fn is_loaded(&self) -> bool {
         self.manager
             .assets
             .get(&self.uuid)
             .unwrap()
-            .read()
-            .await
             .loaded
+            .load(Ordering::SeqCst)
     }
-    pub async fn get(&self) -> RwLockReadGuard<T> {
-        let a: tokio::sync::RwLockReadGuard<AssetEntrie> =
-            self.manager.assets.get(&self.uuid).unwrap().read().await;
-        tokio::sync::RwLockReadGuard::<'_, AssetEntrie>::map(a, |a| {
-            a.asset.as_ref().unwrap().downcast_ref::<T>().unwrap()
-        })
-    }
-    pub async fn get_checked(&self) -> Option<RwLockReadGuard<T>> {
-        match self.is_loaded().await {
-            true => Some(self.get().await),
-            false => None,
+
+    /// this ___MUST___ be only used in *callbacks*
+    pub unsafe fn get_unchecked(&self) -> &'static T {
+        unsafe {
+            dupe(self)
+                .manager
+                .assets
+                .get(&self.uuid)
+                .unwrap()
+                .asset
+                .deref()
+                .downcast_ref()
+                .unwrap()
         }
     }
 
-    pub async fn get_mut(&mut self) -> RwLockMappedWriteGuard<T> {
-        let a = self
-            .manager
-            .assets
-            .get_mut(&self.uuid)
-            .unwrap()
-            .write()
-            .await;
-        let a = tokio::sync::RwLockWriteGuard::<'_, AssetEntrie>::map(a, |a| {
-            a.asset.as_mut().unwrap().downcast_mut::<T>().unwrap()
-        });
-        a
-    }
-    pub async fn get_mut_checked(&mut self) -> Option<RwLockMappedWriteGuard<T>> {
-        match self.is_loaded().await {
-            true => Some(self.get_mut().await),
-            false => None,
+    /// asset could only be modified if it is marked as unloaded, this is to prevent reading the value while it is being modified.
+    pub fn get_mut(&mut self) -> Option<&'static mut T> {
+        if !self.is_loaded() {
+            return None;
         }
-    }
-    pub fn is_loaded_blocking(&self) -> bool {
-        self.manager
-            .assets
-            .get(&self.uuid)
-            .unwrap()
-            .blocking_read()
-            .loaded
-    }
-    pub fn get_blocking(&self) -> RwLockReadGuard<T> {
-        let a: tokio::sync::RwLockReadGuard<AssetEntrie> =
-            self.manager.assets.get(&self.uuid).unwrap().blocking_read();
-        tokio::sync::RwLockReadGuard::<'_, AssetEntrie>::map(a, |a| {
-            a.asset.as_ref().unwrap().downcast_ref::<T>().unwrap()
+        Some(unsafe {
+            dupe(self)
+                .manager
+                .assets
+                .get(&self.uuid)
+                .unwrap()
+                .asset
+                .deref_mut()
+                .downcast_mut()
+                .unwrap()
         })
     }
-    pub fn get_checked_blocking(&self) -> Option<RwLockReadGuard<T>> {
-        match self.is_loaded_blocking() {
-            true => Some(self.get_blocking()),
-            false => None,
-        }
-    }
 
-    pub fn get_mut_blocking(&mut self) -> RwLockMappedWriteGuard<T> {
-        let a = self
-            .manager
-            .assets
-            .get_mut(&self.uuid)
-            .unwrap()
-            .blocking_write();
-        tokio::sync::RwLockWriteGuard::<'_, AssetEntrie>::map(a, |a| {
-            a.asset.as_mut().unwrap().downcast_mut::<T>().unwrap()
-        })
-    }
-    pub fn get_mut_checked_blocking(&mut self) -> Option<RwLockMappedWriteGuard<T>> {
-        match self.is_loaded_blocking() {
-            true => Some(self.get_mut_blocking()),
-            false => None,
-        }
-    }
-    pub fn try_is_loaded(&self) -> Result<bool, TryLockError> {
-        let a = self.manager.assets.get(&self.uuid).unwrap().try_read()?;
-        Ok(a.loaded)
-    }
-    pub fn try_get(&self) -> Result<RwLockReadGuard<T>, TryLockError> {
-        let a: tokio::sync::RwLockReadGuard<AssetEntrie> =
-            self.manager.assets.get(&self.uuid).unwrap().try_read()?;
-        Ok(tokio::sync::RwLockReadGuard::<'_, AssetEntrie>::map(
-            a,
-            |a| a.asset.as_ref().unwrap().downcast_ref::<T>().unwrap(),
-        ))
-    }
-    pub fn try_get_checked(&self) -> Result<Option<RwLockReadGuard<T>>, TryLockError> {
-        match self.is_loaded_blocking() {
-            true => Ok(Some(self.try_get()?)),
-            false => Ok(None),
-        }
-    }
-
-    pub fn try_get_mut(&mut self) -> Result<RwLockMappedWriteGuard<T>, TryLockError> {
-        let a = self
-            .manager
-            .assets
-            .get_mut(&self.uuid)
-            .unwrap()
-            .try_write()?;
-        let res = tokio::sync::RwLockWriteGuard::<'_, AssetEntrie>::map(a, |a| {
-            a.asset.as_mut().unwrap().downcast_mut::<T>().unwrap()
-        });
-        Ok(res)
-    }
-    pub fn try_get_mut_checked(&mut self) -> Option<RwLockMappedWriteGuard<T>> {
-        match self.is_loaded_blocking() {
-            true => Some(self.get_mut_blocking()),
-            false => None,
+    /// the library which allow the users to use AssetHandles need to ensure that if the asset is marked as unloaded, then it wont run their code that could use those assets.
+    /// so it should be safae to unwrap this
+    pub fn get(&self) -> Option<&'static T> {
+        unsafe {
+            match self.is_loaded() {
+                true => Some(self.get_unchecked()),
+                false => None,
+            }
         }
     }
 }
@@ -296,15 +272,9 @@ impl<T: 'static> Future for AssetHandle<T> {
     type Output = Self;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        match self.try_is_loaded() {
-            Ok(x) => match x {
-                true => Poll::Ready(self.clone()),
-                false => {
-                    cx.waker().wake_by_ref();
-                    Poll::Pending
-                }
-            },
-            Err(_) => {
+        match self.is_loaded() {
+            true => Poll::Ready(self.clone()),
+            false => {
                 cx.waker().wake_by_ref();
                 Poll::Pending
             }
@@ -316,6 +286,8 @@ pub struct AssetHandleUntype {
     uuid: Uuid,
     manager: &'static mut AssetManager,
 }
+
+unsafe impl Send for AssetHandleUntype {}
 
 impl Clone for AssetHandleUntype {
     fn clone(&self) -> Self {
@@ -331,11 +303,15 @@ impl AssetHandleUntype {
         Self { uuid, manager }
     }
     pub fn is_loaded(&self) -> bool {
-        self.manager.assets.contains_key(&self.uuid)
+        self.manager
+            .assets
+            .get(&self.uuid)
+            .unwrap()
+            .loaded
+            .load(Ordering::SeqCst)
     }
-    pub fn try_is_loaded(&self) -> Result<bool, TryLockError> {
-        let a = self.manager.assets.get(&self.uuid).unwrap().try_read()?;
-        Ok(a.loaded)
+    pub fn get_typed<T: 'static>(&self) -> AssetHandle<T> {
+        AssetHandle::new(self.uuid, dupe(self).manager)
     }
 }
 
@@ -343,15 +319,9 @@ impl Future for AssetHandleUntype {
     type Output = Self;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        match self.try_is_loaded() {
-            Ok(x) => match x {
-                true => Poll::Ready(self.clone()),
-                false => {
-                    cx.waker().wake_by_ref();
-                    Poll::Pending
-                }
-            },
-            Err(_) => {
+        match self.is_loaded() {
+            true => Poll::Ready(self.clone()),
+            false => {
                 cx.waker().wake_by_ref();
                 Poll::Pending
             }
@@ -362,20 +332,22 @@ impl Future for AssetHandleUntype {
 pub trait AssetLoader: Unpin + Send + Future<Output = Box<dyn Any + Send>> {
     fn set_engine(&mut self, engine: SendEngineRuntime);
     fn set_thread_main_exec(&mut self, tx: flume::Sender<Box<dyn Fn()>>);
-    fn set_loaded_callback(
-        &mut self,
-        tx: flume::Sender<(
-            Box<dyn Fn()>,
-            Box<dyn Fn(Box<dyn Any + Send>, &'static mut EngineRuntime)>,
-        )>,
-    );
 }
+pub trait FinalAsset {
+    type FinalAsset;
+}
+
 pub struct SendWrapper<T: 'static> {
-    pub value: &'static mut T,
+    pub value: T,
+}
+impl<T: Default> Default for SendWrapper<T> {
+    fn default() -> Self {
+        Self::new(T::default())
+    }
 }
 
 impl<T: 'static> SendWrapper<T> {
-    pub fn new(value: &'static mut T) -> Self {
+    pub fn new(value: T) -> Self {
         Self { value }
     }
 }
@@ -384,12 +356,12 @@ impl<T> std::ops::Deref for SendWrapper<T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        &*self.value
+        &self.value
     }
 }
 impl<T> std::ops::DerefMut for SendWrapper<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut *self.value
+        &mut self.value
     }
 }
 unsafe impl<T> Send for SendWrapper<T> {}

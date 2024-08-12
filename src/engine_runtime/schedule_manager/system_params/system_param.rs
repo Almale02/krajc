@@ -1,7 +1,14 @@
+use std::marker::PhantomData;
+
 use mopa::mopafy;
+use uuid::Uuid;
 
 use crate::{
-    engine_runtime::{schedule_manager::schedule::ScheduleRunnable, EngineRuntime},
+    engine_runtime::{
+        schedule_manager::schedule::{IntoSystem, ScheduleRunnable},
+        EngineRuntime,
+    },
+    implement_into_system,
     typed_addr::TypedAddr,
 };
 
@@ -36,17 +43,37 @@ impl<T: EngineResource> From<SystemParam> for Res<T> {
     }
 }
 
+pub struct FunctionSystem<Func: 'static, Marker> {
+    pub name: &'static str,
+    pub function: Func,
+    pub param_filters: Vec<Box<dyn SystemParalellFilter>>,
+    _p: PhantomData<Marker>,
+}
+
+impl<Func: 'static, Marker> FunctionSystem<Func, Marker> {
+    pub fn new(function: Func) -> Self {
+        Self {
+            name: Box::leak(Box::new(Uuid::new_v4().to_string())),
+            function,
+            param_filters: Vec::default(),
+            _p: PhantomData,
+        }
+    }
+}
+
 macro_rules! impl_schedule_runnable {
     ($($param:ident),*) => {
-        impl<$($param),*> ScheduleRunnable for (&'static str, Box<dyn Fn($($param),*)>, Vec<Box<dyn SystemParalellFilter>>)
+        //impl<$($param),*, Func> ScheduleRunnable for (&'static str, Func, Vec<Box<dyn SystemParalellFilter>>, std::marker::PhantomData<fn($($param),*)>  )
+        impl<$($param),*, Func> ScheduleRunnable for FunctionSystem<Func, fn($($param),*)>
         where
-            $($param: From<SystemParam> + IntoSystemParalellFilter + 'static),*
+            $($param: From<SystemParam> + IntoSystemParalellFilter + 'static),*,
+            Func: Fn($($param),*)
         {
             fn run(&mut self, runtime: &'static mut EngineRuntime) {
                 let runtime = TypedAddr::<EngineRuntime>::new(runtime as *mut _ as usize);
                 let mut position = 0;
                 // Call the function
-                self.1(
+                (self.function)(
                     $(
                         std::convert::Into::<$param>::into(
                         {
@@ -71,7 +98,7 @@ macro_rules! impl_schedule_runnable {
                             fn_name: self.name(),
                             position,
                         });
-                        self.2.push(a.get_filterable());
+                        self.param_filters.push(a.get_filterable());
 
                     )*
 
@@ -80,20 +107,11 @@ macro_rules! impl_schedule_runnable {
                 true
             }
             fn name(&self) -> &'static str {
-                self.0
+                self.name
             }
             fn get_params_filters(&self) -> &Vec<Box<dyn SystemParalellFilter>> {
-                &self.2
+                &self.param_filters
             }
-        }
-    };
-}
-
-#[macro_export]
-macro_rules! create_system {
-    ($sys_name: ident ($($param: ident : $param_type: ty),*) $block: block) => {
-        pub fn $sys_name($($param: $param_type),*) {
-            $block
         }
     };
 }
@@ -114,3 +132,20 @@ impl_schedule_runnable!(A, B, C, D);
 impl_schedule_runnable!(A, B, C);
 impl_schedule_runnable!(A, B);
 impl_schedule_runnable!(A);
+
+implement_into_system!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P);
+implement_into_system!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O);
+implement_into_system!(A, B, C, D, E, F, G, H, I, J, K, L, M, N);
+implement_into_system!(A, B, C, D, E, F, G, H, I, J, K, L, M);
+implement_into_system!(A, B, C, D, E, F, G, H, I, J, K, L);
+implement_into_system!(A, B, C, D, E, F, G, H, I, J, K);
+implement_into_system!(A, B, C, D, E, F, G, H, I, J);
+implement_into_system!(A, B, C, D, E, F, G, H, I);
+implement_into_system!(A, B, C, D, E, F, G, H);
+implement_into_system!(A, B, C, D, E, F, G);
+implement_into_system!(A, B, C, D, E, F);
+implement_into_system!(A, B, C, D, E);
+implement_into_system!(A, B, C, D);
+implement_into_system!(A, B, C);
+implement_into_system!(A, B);
+implement_into_system!(A);

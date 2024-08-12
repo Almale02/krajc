@@ -1,11 +1,8 @@
-use std::{
-    ops::{DerefMut, Range},
-    time::Instant,
-};
+/*use std::{ops::Range, time::Instant};
 
 use bevy_ecs::{
     entity::Entity,
-    query::{Added, Changed, Or, With, Without},
+    query::{Changed, With},
 };
 use cgmath::Zero;
 use krajc::{system_fn, FromEngine};
@@ -16,16 +13,11 @@ use wgpu::{
 
 use crate::{
     engine_runtime::{
-        engine_cache::engine_cache::{CacheHandle, EngineCache},
-        schedule_manager::{
-            runtime_schedule::{RuntimePhysicsSyncMainSchedule, RuntimePostPhysicsSyncSchedule},
-            system_params::{system_query::SystemQuery, system_resource::Res},
-        },
+        schedule_manager::system_params::{system_query::SystemQuery, system_resource::Res},
         EngineRuntime,
     },
     rendering::{
         buffer_manager::{managed_buffer::ManagedBufferInstanceHandle, InstanceBufferType},
-        builtin_materials::light_material::instance_data::LightMaterialInstance,
         managers::RenderManagerResource,
         material::MaterialGeneric,
         mesh::mesh::{Mesh, TextureVertex, Vertex},
@@ -36,9 +28,9 @@ use crate::{
     Lateinit, TextureMaterialMarker,
 };
 
-use super::instance_data::{RawTextureMaterialInstance, TextureMaterialInstance};
+use super::instance_data::{RawTextureMaterialInstance, TextureMaterialInstance};*/
 
-#[derive(FromEngine)]
+/*#[derive(FromEngine)]
 pub struct TextureMaterial {
     pub instance_count: u32,
     mesh: Lateinit<Mesh<TextureVertex>>,
@@ -97,7 +89,7 @@ pub fn update_texture_material(
 ) {
     let query = query
         .iter()
-        .map(|(entity, trans)| {
+        .map(|(_entity, trans)| {
             //println!("{:?} has trans: {}", entity, trans.iso);
             TextureMaterialInstance::new(
                 trans.clone().into(),
@@ -243,6 +235,6 @@ you could call Texture::get_texture_bind_group on the created texture, and then 
         0..self.mesh.index_list.len() as u32
     }
     fn register_systems(&self, engine: &mut EngineRuntime) {
-        update_texture_material!(engine);
+        //update_texture_material!(engine);
     }
-}
+}*/

@@ -39,11 +39,8 @@ struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) uv: vec2<f32>,
     @location(1) world_normal: vec3<f32>,
-    @location(2) world_position: vec3<f32>,};
-
-
-
-
+    @location(2) world_position: vec3<f32>,
+};
 
 @vertex
 fn vs_main(
@@ -58,7 +55,7 @@ fn vs_main(
     );
     // NEW!
     var out: VertexOutput;
-    out.uv= model.uv;
+    out.uv = model.uv;
 
     out.world_normal = (model_matrix * vec4<f32>(model.normal, 0.0)).xyz;    
     //out.world_normal = model.normal * normal_matrix;

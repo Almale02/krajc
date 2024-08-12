@@ -1,17 +1,15 @@
 #![allow(invalid_reference_casting)]
 #![allow(clippy::module_inception)]
 #![allow(macro_expanded_macro_exports_accessed_by_absolute_paths)]
-//#![feature(negative_impls)]
 #![feature(stmt_expr_attributes)]
 #![feature(async_closure)]
+#![deny(unused_imports)]
 #![allow(clippy::type_complexity)]
 
 use crate::rendering::systems::general::update_rendering;
 
-//pub type QueryFilter<A, B = Passthrough> = EntityFilterTuple<A, B>;
-
 use bevy_ecs::component::Component;
-use futures::{future::join_all, stream::FuturesUnordered, FutureExt, StreamExt};
+use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
 use krajc::system_fn;
 use physics::{
     components::{
@@ -32,20 +30,23 @@ use tokio::sync::RwLock;
 use typed_addr::{dupe, TypedAddr};
 
 use std::{
-    any::{type_name, Any},
+    any::type_name,
     collections::HashMap,
     hash::Hash,
     ops::{Deref, DerefMut},
-    sync::Arc,
-    task::{Context, Poll},
+    sync::{atomic::Ordering, Arc},
     time::{Duration, Instant},
 };
 
-use cgmath::{num_traits::Signed, Deg, Point3, Rad, Vector3};
+use cgmath::{num_traits::Signed, Deg, Point3, Quaternion, Rad, Vector3, Zero};
 
 use rapier3d::na::Vector3 as NaVec3;
 
-use engine_runtime::schedule_manager::runtime_schedule::RuntimePostUpdateSchedule;
+use engine_runtime::schedule_manager::{
+    runtime_schedule::RuntimePostUpdateSchedule,
+    schedule::{IntoSystem, Schedule as _},
+    system_params::system_param::FunctionSystem,
+};
 use engine_runtime::{
     schedule_manager::{
         runtime_schedule::{
@@ -59,26 +60,24 @@ use engine_runtime::{
 
 use ordered_float::OrderedFloat;
 use rendering::{
-    asset::{AssetEntrie, AssetLoader, SendWrapper},
-    asset_loaders::file_resource_loader::{FileResourceLoader, RawFileLoader, ShaderLoader},
+    asset::{AssetHandleUntype, AssetLoader, SendWrapper},
+    asset_loaders::file_resource_loader::{FileResourceLoader, ShaderLoader, TextureLoader},
     buffer_manager::{managed_buffer::ManagedBufferGeneric, InstanceBufferType, UniformBufferType},
-    builtin_materials::{
-        light_material::material::update_light_material,
-        texture_material::material::update_texture_material,
+    builtin_materials::light_material::{
+        instance_data::LightMaterialInstance,
+        material::{update_light_material, LightMaterial},
     },
     camera::camera::Camera,
+    draw_pass::DrawPass,
     managers::RenderManagerResource,
     mesh::mesh::TextureVertexTemplates,
     systems::general::{make_light_follow_camera, sync_light, Color, Light, Transform},
 };
 
-use wgpu::{BufferUsages, SurfaceError};
+use wgpu::{BufferUsages, ShaderModule, SurfaceError};
 use winit::{
-    dpi::PhysicalSize,
-    event::*,
-    event_loop::{ControlFlow, EventLoop},
-    platform::run_return::EventLoopExtRunReturn,
-    window::WindowBuilder,
+    dpi::PhysicalSize, event::*, event_loop::EventLoop,
+    platform::run_return::EventLoopExtRunReturn, window::WindowBuilder,
 };
 
 use crate::engine_runtime::schedule_manager::runtime_schedule::RuntimeEngineLoadSchedule;
@@ -116,10 +115,6 @@ fn startup(
 ) {
     target_fps.0 = 90.;
     gravity.0 = NaVec3::new(0.04, -0.5, 0.);
-    dbg!("ran startup");
-    //let mut entities = vec![];
-
-    //gravity.0 = NaVec3::new(0., -2., 0.);
 
     let stack = 1;
     let width = 32;
@@ -190,8 +185,7 @@ fn startup(
     let mesh = TextureVertexTemplates::cube(&render.device);
     let light_mesh = TextureVertexTemplates::build_cube(&render.device, 0.3, 0.3, 0.3);
 
-    render.light_material.set_mesh(mesh);
-    render.texture_material.set_mesh(light_mesh);
+    //render.light_material.set_mesh(mesh);
 }
 
 #[system_fn(RuntimeUpdateSchedule)]
@@ -203,14 +197,19 @@ fn fps_logger(update: Res<RuntimeUpdateScheduleData>, mut prev_full_sec: Local<u
     }
 }
 
+//#[system_fn(RuntimeUpdateSchedules)]
+fn testing(_a: Res<Gravity>) {
+    //
+}
+
 pub async fn run() {
+    //dbg!("a");
     let runtime = EngineRuntime::init();
 
-    let thread_rx: flume::Receiver<(
-        &'static std::sync::Arc<tokio::sync::RwLock<AssetEntrie>>,
-        Box<dyn AssetLoader<Output = Box<dyn Any + Send>>>,
-    )> = runtime.render_resource_manager.thread_rx.clone();
-    let handle = std::thread::spawn(move || {
+    let thread_rx = runtime.render_resource_manager.thread_rx.clone();
+
+    let thread_runtime = dupe(runtime);
+    std::thread::spawn(move || {
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
@@ -218,15 +217,32 @@ pub async fn run() {
         let rx = thread_rx;
 
         rt.block_on(async move {
+            let runtime = thread_runtime;
             let mut futures = FuturesUnordered::new();
             loop {
+                let runtime = dupe(runtime);
                 tokio::select! {
-                    Ok((lock, loader)) = rx.recv_async() => {
+                    Ok((asset, loader)) = rx.recv_async() => {
                         let future = async move {
                             let res = loader.await;
-                            let mut unlock = lock.write().await;
-                            unlock.asset = Some(res);
-                            unlock.loaded = true; // Ensure loaded is set to true
+                            let uuid = asset.uuid;
+
+                            asset.loaded.store(false, Ordering::SeqCst);
+                                dbg!("ran callback!!!!!!!!!!!!!!!!!!!!!!4");
+
+                            let asset_mut = asset.get_mut().unwrap();
+                            *asset_mut = res;
+                            let handle = AssetHandleUntype::new(uuid,  &mut dupe(runtime).render_resource_manager);
+
+                            let callbacks = &asset.callbacks;
+                            dbg!(callbacks);
+                            for callback in callbacks {
+                                dbg!("ran callback!!!!!!!!!!!!!!!!!!!!!!4!4!44! at thread");
+                                callback(handle.clone(), dupe(runtime));
+                            }
+                            //asset.loaded.store(true, Ordering::SeqCst);
+                            dbg!("ran end");
+
                         }.boxed();
                         futures.push(future);
                     },
@@ -267,17 +283,28 @@ pub async fn run() {
 
     runtime.init_rendering(window).await;
 
-    startup!(runtime);
-    fps_logger!(runtime);
-    update_rendering!(runtime);
-    sync_light!(runtime);
+    runtime.register_system::<RuntimeEngineLoadSchedule>(startup.into_system());
+    runtime.register_system::<RuntimeUpdateSchedule>(fps_logger.into_system());
+    runtime.register_system::<RuntimeUpdateSchedule>(update_rendering.into_system());
+    runtime.register_system::<RuntimeUpdateSchedule>(sync_light.into_system());
 
-    update_light_material!(runtime);
-    update_texture_material!(runtime);
+    runtime.register_system::<RuntimePostPhysicsSyncSchedule>(update_light_material.into_system());
+    /*runtime
+    .register_system::<RuntimePostPhysicsSyncSchedule>(update_texture_material.into_system());*/
 
-    make_light_follow_camera!(runtime);
+    runtime.register_system::<RuntimeUpdateSchedule>(make_light_follow_camera.into_system());
+
+    //collider_systems(runtime);
 
     physics_systems(runtime);
+
+    /*AppBuilder::register_systems(|a| {
+        a.register(RuntimeEngineLoadSchedule, startup, other_things);
+    }).build();*/
+
+    dupe(runtime)
+        .get_resource_mut::<RuntimeEngineLoadSchedule>()
+        .register(FunctionSystem::new(testing));
 
     runtime
         .get_resource_mut::<RuntimeEngineLoadSchedule>()
@@ -309,12 +336,25 @@ pub async fn run() {
 
     let load = runtime.get_resource_mut::<RuntimeEngineLoadSchedule>();
     load.execute(dupe(runtime));
-
-    let mut shader_res = runtime
-        .render_resource_manager
-        .load_resource(FileResourceLoader::<ShaderLoader>::new(
+    let shader_res = runtime.render_resource_manager.load_resource(
+        FileResourceLoader::<ShaderLoader>::new(
             "resources/shaders/shader_light.wgsl",
-        ));
+            ShaderLoader::default(),
+        ),
+        vec![|x, runtime| {
+            let shader = x.get_typed::<ShaderModule>();
+            unsafe { dbg!(shader.get_unchecked()) };
+            let shader = unsafe { shader.get_unchecked() };
+            LightMaterial::set_render_pipeline(runtime, shader);
+        }],
+    );
+    let texture = runtime.render_resource_manager.load_resource(
+        FileResourceLoader::<TextureLoader>::new(
+            "resources/image/dirt/dirt.png",
+            TextureLoader::default(),
+        ),
+        vec![],
+    );
 
     //let mut finished = false;
 
@@ -327,13 +367,16 @@ pub async fn run() {
         let frame_start = Instant::now();
         let dt = frame_start - last_render_time;
 
-
-        
         while let Ok(req) = runtime.render_resource_manager.main_exec_rx.try_recv() {
             req();
         }
-        while let Ok(req) = runtime.render_resource_manager.main_exec_rx.try_recv() {
-            req();
+        while let Ok(req) = runtime
+            .render_resource_manager
+            .loaded_callback_rx
+            .try_recv()
+        {
+            req.1();
+            req.2(req.0, dupe(runtime))
         }
         event_loop.run_return(|event, _, control_flow_event| match event {
             Event::WindowEvent {
@@ -361,7 +404,6 @@ pub async fn run() {
                     .. // We're not using device_id currently
                 } => {
                     render.get().camera_controller.deref_mut().process_mouse(delta.0, delta.1);
-                    
                 },
                 Event::WindowEvent {
                     ref event,
@@ -377,9 +419,7 @@ pub async fn run() {
                         }
                     }
                 },
-                
                 _ => {}
-                
             }
         }
 
@@ -390,12 +430,31 @@ pub async fn run() {
         }
         runtime.update(dt, start);
         last_render_time = frame_start;
-        dbg!(1. / dt.as_secs_f32());
         let since_start = frame_start - start;
         let since_start = since_start.as_secs_f32();
         if prev_full_sec != since_start as u64 {
             prev_full_sec = since_start as u64;
         }
+        let engine = dupe(runtime);
+        let light_material_pass = dupe(engine).engine_cache.cache("light_draw_pass", || {
+            let render = engine.get_resource_mut::<RenderManagerResource>();
+            let mut material = LightMaterial::from_engine(engine);
+
+            let mesh = TextureVertexTemplates::cube(&render.device);
+            material.set_mesh(mesh);
+            material.set_instance(render.light_instance_buffer.get().clone());
+
+            material.set_instance_value(vec![LightMaterialInstance::new(
+                Vec3::new(0., 0., 0.),
+                Quaternion::zero(),
+            )]);
+
+            DrawPass::new(
+                Box::new(material),
+                vec![shader_res.as_untype(), texture.as_untype()],
+            )
+        });
+        render.get().draw_passes.push(light_material_pass);
 
         span!(trace_render, "rendering");
         match runtime.render() {
@@ -418,107 +477,15 @@ pub async fn run() {
         if diff.is_positive() {
             spin_sleep::sleep(Duration::from_secs_f32(diff));
         }
-        dbg!("ran frame");
+        //dbg!("ran frame");
 
         #[cfg(not(feature = "prod"))]
         tracing_tracy::client::frame_mark();
 
         if !should_run {
-            break
+            break;
         }
     }
-
-    /*event_loop.run(move |event, _window_target, control_flow: &mut ControlFlow| {
-        span!(trace_loop, "event loop");
-
-        match event {
-            Event::NewEvents(StartCause::Poll) => {
-                let frame_start = Instant::now();
-                let dt = frame_start - last_render_time;
-
-                //dbg!(shader_res.try_is_loaded().unwrap());
-
-                //dbg!(shader_res.try_is_loaded().unwrap());
-
-                dbg!(shader_res.try_is_loaded());
-                while let Ok(req) = runtime.render_resource_manager.main_exec_rx.try_recv() {
-                    req();
-                }
-
-
-                //runtime.update(dt, start);
-                last_render_time = frame_start;
-                //dbg!(1. / dt.as_secs_f32());
-                let since_start = frame_start - start;
-                let since_start = since_start.as_secs_f32();
-                if prev_full_sec != since_start as u64 {
-                    //println!("fps: {}", 1. / dt.as_secs_f32());
-                    prev_full_sec = since_start as u64;
-                }
-
-                span!(trace_render, "rendering");
-                match runtime.render() {
-                    Ok(_) => {}
-                    Err(SurfaceError::Lost) => runtime.resize(*render.get().size),
-                    Err(SurfaceError::Outdated) => control_flow.set_exit(),
-                    Err(e) => eprintln!("{:?}", e),
-                }
-                drop_span!(trace_render);
-
-                let target_fps = runtime.get_resource::<TargetFps>();
-
-                // added 10 to it because it looks like atleaset on my computer that it slows it too much down by around 10 fps
-                let target_frame_time = 1. / (target_fps.0 + 10.);
-
-                let current_frame_time = frame_start.elapsed().as_secs_f32();
-
-                let diff = target_frame_time - current_frame_time;
-
-                if diff.is_positive() {
-                    spin_sleep::sleep(Duration::from_secs_f32(diff));
-                }
-
-                #[cfg(not(feature = "prod"))]
-                tracing_tracy::client::frame_mark();
-            }
-            Event::DeviceEvent {
-                event: DeviceEvent::MouseMotion{ delta, },
-                .. // We're not using device_id currently
-            } => {
-                render.get().camera_controller.deref_mut().process_mouse(delta.0, delta.1);
-
-
-
-            }
-
-            /*Event::MainEventsCleared => {
-                (*window_ref).request_redraw();
-                (*window_ref).request_redraw();
-            }
-            Event::RedrawRequested(id) if id == (*window_ref).id() => {
-            }*/
-            Event::WindowEvent {
-                ref event,
-                window_id,
-            } if window_id == window_ref.id() => {
-                if !runtime.window_events(event) {
-                    match event {
-                        WindowEvent::CloseRequested | get_key_pressed!(VirtualKeyCode::Escape) => {
-                            control_flow.set_exit()
-                        }
-                        WindowEvent::Resized(size) => runtime.resize(*size),
-                        WindowEvent::ScaleFactorChanged {
-                            scale_factor: _,
-                            new_inner_size,
-                        } => runtime.resize(**new_inner_size),
-
-                        _ => {}
-                    }
-                }
-            }
-            _ => {}
-        };
-    }*/
 }
 
 mod key_macros {
@@ -600,9 +567,6 @@ impl Hash for Vec3 {
     }
 }
 
-create_system!(new_system(a: i32) {
-    dbg!(a);
-});
 #[macro_export]
 macro_rules! generate_state_struct{
     ($struct_name:ident { $($field:ident: $type:ty = $value:expr),* $(,)? }) => {
@@ -652,64 +616,6 @@ macro_rules! generate_state_struct{
     };
 }
 
-#[macro_export]
-macro_rules! generate_state_struct_non_resource {
-    ($struct_name:ident { $($field:ident: $type:ty = $value:expr),* $(,)? }) => {
-        pub struct $struct_name {
-            $(pub $field: GenericStateRefTemplate<$type>),*
-        }
-
-        impl $struct_name {
-            pub fn new() -> Self {
-                Self {
-                    $($field: GenericStateRefTemplate::<$type>::new($value)),*
-                }
-            }
-            pub fn init() -> &'static mut Self {
-                let mgr = Box::new(Self::default());
-                let leaked = Box::leak(mgr);
-                let raw = leaked as *mut _;
-
-                leaked
-            }
-
-        }
-        impl Default for $struct_name {
-            fn default() -> Self {
-                Self::new()
-            }
-        }
-    };
-    ($struct_name:ident { $($field:ident: $type:ty = $name:expr => $init_value: expr),* $(,)? }) => {
-        pub struct $struct_name {
-            $(pub $field: GenericStateRefTemplate<$type>),*
-        }
-        impl $struct_name {
-            pub fn new() -> Self {
-                Self {
-                    $($field: GenericStateRefTemplate::<$type>::new($name)),*
-                }
-            }
-            pub fn create_new() -> Self {
-                Self {
-                    $($field: GenericStateRefTemplate::<$type>::new_and_init($name, $init_value)),*
-                }
-            }
-            pub fn init() -> &'static mut Self {
-                let mgr = Box::new(Self::default());
-                let leaked = Box::leak(mgr);
-                let _raw = leaked as *mut _;
-
-                leaked
-            }
-        }
-        impl Default for $struct_name {
-            fn default() -> Self {
-                Self::create_new()
-            }
-        }
-    };
-}
 #[macro_export]
 macro_rules! struct_with_default {
     ($struct_name:ident { $($field:ident: $type:ty = $init_value: expr),* $(,)? }) => {
@@ -876,5 +782,19 @@ pub trait FromEngine {
 impl<T: Default> FromEngine for T {
     fn from_engine(_engine: &'static mut EngineRuntime) -> Self {
         T::default()
+    }
+}
+
+struct Takeable<T> {
+    value: Option<T>,
+}
+
+impl<T> Takeable<T> {
+    pub fn new(value: T) -> Self {
+        Takeable { value: Some(value) }
+    }
+
+    pub fn take(&mut self) -> Option<T> {
+        self.value.take()
     }
 }

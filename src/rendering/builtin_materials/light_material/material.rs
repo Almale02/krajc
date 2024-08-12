@@ -2,31 +2,26 @@ use std::{ops::Range, time::Instant};
 
 use bevy_ecs::{
     entity::Entity,
-    query::{Added, Changed, Or, With, Without},
+    query::{Changed, With},
 };
 use cgmath::Zero;
 use krajc::{system_fn, EngineResource, FromEngine};
 use wgpu::{
-    BindGroupLayout, Buffer, CompareFunction, DepthBiasState, DepthStencilState, Face, Features,
-    RenderPass, RenderPipeline, RenderPipelineDescriptor, ShaderModuleDescriptor, ShaderSource,
-    StencilState,
+    BindGroupLayout, Buffer, CompareFunction, DepthBiasState, DepthStencilState, Face, RenderPass,
+    RenderPipeline, RenderPipelineDescriptor, ShaderModule, StencilState,
 };
 
+use crate::rendering::asset::AssetHandle;
+#[allow(unused_imports)]
 use crate::{
-    drop_span,
     engine_runtime::{
-        engine_cache::engine_cache::CacheHandle,
-        schedule_manager::{
-            runtime_schedule::{RuntimePhysicsSyncMainSchedule, RuntimePostPhysicsSyncSchedule},
-            system_params::{
-                system_query::SystemQuery,
-                system_resource::{EngineResource, Res},
-            },
+        schedule_manager::system_params::{
+            system_query::SystemQuery,
+            system_resource::{EngineResource, Res},
         },
         EngineRuntime,
     },
     rendering::{
-        asset_loaders::file_resource_loader::{FileResourceLoader, ShaderLoader},
         buffer_manager::{managed_buffer::ManagedBufferInstanceHandle, InstanceBufferType},
         managers::RenderManagerResource,
         material::MaterialGeneric,
@@ -34,9 +29,8 @@ use crate::{
         systems::general::Transform,
         texture::texture::Texture,
     },
-    span, struct_with_default,
     typed_addr::dupe,
-    FromEngine, Lateinit, LightMaterialMarker, TextureMaterialMarker,
+    FromEngine, Lateinit, LightMaterialMarker,
 };
 
 use super::instance_data::{LightMaterialInstance, RawLightMaterialInstance};
@@ -45,17 +39,19 @@ use super::instance_data::{LightMaterialInstance, RawLightMaterialInstance};
 pub struct LightMaterial {
     pub instance_count: u32,
     mesh: Lateinit<Mesh<TextureVertex>>,
+    texture: AssetHandle<Texture>,
     instance_buffer: Lateinit<ManagedBufferInstanceHandle<InstanceBufferType>>,
     camera_layout: Lateinit<&'static wgpu::BindGroupLayout>,
     camera_bind_group: Lateinit<wgpu::BindGroup>,
     light_layout: Lateinit<&'static wgpu::BindGroupLayout>,
     light_bind_group: Lateinit<wgpu::BindGroup>,
 }
+
 #[derive(EngineResource)]
 pub struct LightMaterialResource {
     pub light_layout: BindGroupLayout,
     pub camera_layout: BindGroupLayout,
-    pub pipeline: CacheHandle<RenderPipeline>,
+    pub pipeline: Lateinit<RenderPipeline>,
 }
 
 impl FromEngine for LightMaterialResource {
@@ -96,7 +92,7 @@ impl FromEngine for LightMaterialResource {
                         label: Some("light_bind_group_layout"),
                     })
             },
-            pipeline: CacheHandle::from_engine(engine),
+            pipeline: Default::default(),
         }
     }
 }
@@ -104,6 +100,9 @@ impl FromEngine for LightMaterialResource {
 impl LightMaterial {
     pub fn set_mesh(&mut self, mesh: Mesh<TextureVertex>) {
         self.mesh.set(mesh);
+    }
+    pub fn set_texture(&mut self, texture: AssetHandle<Texture>) {
+        self.texture = texture;
     }
     pub fn set_instance(
         &mut self,
@@ -127,6 +126,75 @@ impl LightMaterial {
         let collect_part = map_part.collect::<Vec<_>>();
 
         self.instance_buffer.set_data_vec(collect_part);
+    }
+    pub fn set_render_pipeline(engine: &'static mut EngineRuntime, shader: &ShaderModule) {
+        let render = engine.get_resource_mut::<RenderManagerResource>();
+        let material_res = engine.get_resource_mut::<LightMaterialResource>();
+
+        let render_pipeline_layout =
+            render
+                .device
+                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some("Render Pipeline Layout"),
+                    bind_group_layouts: &[
+                        &Texture::get_texture_bind_layout(&render.device),
+                        &material_res.camera_layout,
+                        &material_res.light_layout,
+                    ],
+                    push_constant_ranges: &[],
+                });
+
+        material_res
+            .pipeline
+            .set(
+                render
+                    .device
+                    .create_render_pipeline(&RenderPipelineDescriptor {
+                        label: Some("Render Pipeline"),
+                        layout: Some(&render_pipeline_layout),
+                        vertex: wgpu::VertexState {
+                            module: shader,
+                            entry_point: "vs_main", // 1.
+                            buffers: &[TextureVertex::layout(), RawLightMaterialInstance::desc()], // 2.
+                        },
+                        fragment: Some(wgpu::FragmentState {
+                            // 3.
+                            module: shader,
+                            entry_point: "fs_main",
+                            targets: &[Some(wgpu::ColorTargetState {
+                                // 4.
+                                format: render.config.format,
+                                blend: Some(wgpu::BlendState::REPLACE),
+                                write_mask: wgpu::ColorWrites::ALL,
+                            })],
+                        }),
+                        primitive: wgpu::PrimitiveState {
+                            topology: wgpu::PrimitiveTopology::TriangleList, // 1.
+                            strip_index_format: None,
+                            front_face: wgpu::FrontFace::Cw, // 2.
+                            cull_mode: Some(Face::Front),
+                            // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
+                            polygon_mode: wgpu::PolygonMode::Fill,
+                            // Requires Features::DEPTH_CLIP_CONTROL
+                            unclipped_depth: false,
+                            // Requires Features::CONSERVATIVE_RASTERIZATION
+                            conservative: false,
+                        },
+                        depth_stencil: Some(DepthStencilState {
+                            format: Texture::DEPTH_FORMAT,
+                            depth_write_enabled: true,
+                            depth_compare: CompareFunction::Less,
+                            stencil: StencilState::default(),
+                            bias: DepthBiasState::default(),
+                        }), // 1.
+                        multisample: wgpu::MultisampleState {
+                            count: 1,                         // 2.
+                            mask: !0,                         // 3.
+                            alpha_to_coverage_enabled: false, // 4.
+                        },
+                        multiview: None, // 5.
+                    }),
+            );
     }
 }
 
@@ -152,7 +220,7 @@ pub fn update_light_material(
         })
         .collect::<Vec<_>>();
     if !query.len().is_zero() {
-        render.light_material.set_instance_value(query)
+        //render.light_material.set_instance_value(query)
     };
 }
 
@@ -162,79 +230,7 @@ impl MaterialGeneric for LightMaterial {
     }
     fn render_pipeline(&mut self, engine: &mut EngineRuntime) -> &RenderPipeline {
         let light_res = engine.get_resource_mut::<LightMaterialResource>();
-        light_res.pipeline.cache(|| {
-            let render = engine.get_resource_mut::<RenderManagerResource>();
-
-            span!(trace_reading_shader, "reading shader");
-            let file = std::fs::read_to_string("resources/shaders/shader_light.wgsl")
-                .expect("failed to load shader for light material");
-            drop_span!(trace_reading_shader);
-            let shader = render.device.create_shader_module(ShaderModuleDescriptor {
-                label: Some("Shader"),
-                source: ShaderSource::Wgsl(file.as_str().into()),
-            });
-
-            let render_pipeline_layout =
-                render
-                    .device
-                    .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                        label: Some("Render Pipeline Layout"),
-                        bind_group_layouts: &[
-                            &Texture::get_texture_bind_layout(&render.device),
-                            &self.camera_layout,
-                            &self.light_layout,
-                        ],
-                        push_constant_ranges: &[],
-                    });
-
-            render
-                .device
-                .create_render_pipeline(&RenderPipelineDescriptor {
-                    label: Some("Render Pipeline"),
-                    layout: Some(&render_pipeline_layout),
-                    vertex: wgpu::VertexState {
-                        module: &shader,
-                        entry_point: "vs_main", // 1.
-                        buffers: &[TextureVertex::layout(), RawLightMaterialInstance::desc()], // 2.
-                    },
-                    fragment: Some(wgpu::FragmentState {
-                        // 3.
-                        module: &shader,
-                        entry_point: "fs_main",
-                        targets: &[Some(wgpu::ColorTargetState {
-                            // 4.
-                            format: render.config.format,
-                            blend: Some(wgpu::BlendState::REPLACE),
-                            write_mask: wgpu::ColorWrites::ALL,
-                        })],
-                    }),
-                    primitive: wgpu::PrimitiveState {
-                        topology: wgpu::PrimitiveTopology::TriangleList, // 1.
-                        strip_index_format: None,
-                        front_face: wgpu::FrontFace::Cw, // 2.
-                        cull_mode: Some(Face::Front),
-                        // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
-                        polygon_mode: wgpu::PolygonMode::Fill,
-                        // Requires Features::DEPTH_CLIP_CONTROL
-                        unclipped_depth: false,
-                        // Requires Features::CONSERVATIVE_RASTERIZATION
-                        conservative: false,
-                    },
-                    depth_stencil: Some(DepthStencilState {
-                        format: Texture::DEPTH_FORMAT,
-                        depth_write_enabled: true,
-                        depth_compare: CompareFunction::Less,
-                        stencil: StencilState::default(),
-                        bias: DepthBiasState::default(),
-                    }), // 1.
-                    multisample: wgpu::MultisampleState {
-                        count: 1,                         // 2.
-                        mask: !0,                         // 3.
-                        alpha_to_coverage_enabled: false, // 4.
-                    },
-                    multiview: None, // 5.
-                })
-        })
+        &light_res.pipeline
     }
     fn index_buffer(&self, _engine: &mut EngineRuntime) -> &'static Buffer {
         &dupe(self).mesh.index_buffer
@@ -274,9 +270,14 @@ impl MaterialGeneric for LightMaterial {
     }
     fn set_bind_groups<'a>(&'a self, pipeline: &mut RenderPass<'a>, engine: &mut EngineRuntime) {
         let state = engine.get_resource_mut::<RenderManagerResource>();
+        let texture = self
+            .texture
+            .get()
+            .expect("could not access texture in set_bind_groups");
 
-        pipeline.set_bind_group(0, state.texture.texture_bind_group.as_option().expect("the field texture_bind_group needs to be set on textures before applying them for render,
-you could call Texture::get_texture_bind_group on the created texture, and then set the return as the bind group field"), &[]);
+        pipeline.set_bind_group(0, texture.texture_bind_group.as_option().expect("the field texture_bind_group needs to be set on textures before applying them for render,
+        you could call Texture::get_texture_bind_group on the created texture, and then set the return as the bind group field"), &[]);
+
         pipeline.set_bind_group(1, &self.camera_bind_group, &[]);
         pipeline.set_bind_group(2, &self.light_bind_group, &[]);
     }
@@ -284,7 +285,7 @@ you could call Texture::get_texture_bind_group on the created texture, and then 
         0..self.mesh.index_list.len() as u32
     }
     fn register_systems(&self, engine: &mut EngineRuntime) {
-        update_light_material!(engine);
+        //update_light_material!(engine);
     }
 }
 
