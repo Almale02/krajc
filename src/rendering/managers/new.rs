@@ -168,6 +168,6 @@ impl EngineRuntime {
         render_state.light_uniform.set(light_uniform);
         render_state.light_buffer.set(light_buffer);
 
-        dbg!(render_state.light_instance_buffer.get_buffer().size());
+        //dbg!(render_state.light_instance_buffer.get_buffer().size());
     }
 }

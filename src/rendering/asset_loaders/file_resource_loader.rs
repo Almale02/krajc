@@ -344,12 +344,16 @@ impl Future for TextureLoader {
                     .send(Box::new(move || {
                         let render = engine.get_resource_no_init::<RenderManagerResource>();
 
-                        let texture = Texture::from_bytes(
+                        let mut texture = Texture::from_bytes(
                             &render.device,
                             &render.queue,
                             &bytes,
                             "Texture created in AssetLoader",
-                        );
+                        )
+                        .unwrap();
+                        texture
+                            .texture_bind_group
+                            .set(texture.get_texture_bind_group(&render.device));
                         tx.send(Box::new(texture)).unwrap();
                     }))
                     .unwrap();

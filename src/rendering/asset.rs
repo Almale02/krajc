@@ -66,8 +66,8 @@ impl AssetEntrie {
         Self {
             loaded: false.into(),
             asset: UnsafeCell::new(Box::new(0_u8)),
-            callbacks: Vec::default().into(),
-            uuid: Uuid::default(),
+            callbacks,
+            uuid,
         }
     }
     /// asset could only be modified if it is marked as unloaded, this is to prevent reading the value while it is being modified.
@@ -214,17 +214,20 @@ impl<T: 'static> AssetHandle<T> {
             _p: PhantomData,
         }
     }
-    pub fn is_loaded(&self) -> bool {
-        self.manager
-            .assets
-            .get(&self.uuid)
-            .unwrap()
-            .loaded
-            .load(Ordering::SeqCst)
+    pub fn is_loaded(&self) -> Option<bool> {
+        let a = self.manager.assets.get(&self.uuid);
+        match a {
+            Some(x) => Some(x.loaded.load(Ordering::SeqCst)),
+            None => None,
+        }
+
+        /*.expect(format!("didnt find resource with {}", self.uuid).as_str())
+        .loaded
+        .load(Ordering::SeqCst)*/
     }
 
     /// this ___MUST___ be only used in *callbacks*
-    pub unsafe fn get_unchecked(&self) -> &'static T {
+    pub unsafe fn get_unchecked(&self) -> Option<&'static T> {
         unsafe {
             dupe(self)
                 .manager
@@ -234,13 +237,12 @@ impl<T: 'static> AssetHandle<T> {
                 .asset
                 .deref()
                 .downcast_ref()
-                .unwrap()
         }
     }
 
     /// asset could only be modified if it is marked as unloaded, this is to prevent reading the value while it is being modified.
     pub fn get_mut(&mut self) -> Option<&'static mut T> {
-        if !self.is_loaded() {
+        if !self.is_loaded().unwrap() {
             return None;
         }
         Some(unsafe {
@@ -256,13 +258,20 @@ impl<T: 'static> AssetHandle<T> {
         })
     }
 
-    /// the library which allow the users to use AssetHandles need to ensure that if the asset is marked as unloaded, then it wont run their code that could use those assets.
+    /// the library which allow the users to use AssetHandles need to ensure that if the asset is marked as unloaded,
+    /// then it wont run their code that could use those assets.
     /// so it should be safae to unwrap this
     pub fn get(&self) -> Option<&'static T> {
         unsafe {
             match self.is_loaded() {
-                true => Some(self.get_unchecked()),
-                false => None,
+                Some(x) => match x {
+                    true => match self.get_unchecked() {
+                        Some(x) => Some(x),
+                        None => None,
+                    },
+                    false => None,
+                },
+                None => None,
             }
         }
     }
@@ -272,7 +281,7 @@ impl<T: 'static> Future for AssetHandle<T> {
     type Output = Self;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        match self.is_loaded() {
+        match self.is_loaded().unwrap() {
             true => Poll::Ready(self.clone()),
             false => {
                 cx.waker().wake_by_ref();

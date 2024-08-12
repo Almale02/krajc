@@ -154,7 +154,7 @@ pub fn sync_target_transform_kinematic_body(
     mut bodies: Res<RigidBodySet>,
 ) {
     for (target, handle) in target_transform.iter() {
-        dbg!(*target.0);
+        //dbg!(*target.0);
         bodies
             .get_mut(handle.0)
             .unwrap()

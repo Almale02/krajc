@@ -15,7 +15,7 @@ impl DrawPass {
 
     pub fn is_loaded(&self) -> bool {
         for x in self.res_handles.iter() {
-            dbg!(x.is_loaded());
+            //dbg!(x.is_loaded());
             if !x.is_loaded() {
                 return false;
             }
@@ -25,6 +25,7 @@ impl DrawPass {
     pub fn draw<'a>(&'a mut self, pass: &mut RenderPass<'a>, engine: &mut EngineRuntime) {
         pass.set_pipeline(dupe(self).mat.render_pipeline(engine));
 
+        self.mat.setup_bind_groups(engine);
         self.mat.set_bind_groups(pass, engine);
 
         pass.set_vertex_buffer(0, self.mat.vertex_buffer(engine).slice(..));

@@ -228,19 +228,19 @@ pub async fn run() {
                             let uuid = asset.uuid;
 
                             asset.loaded.store(false, Ordering::SeqCst);
-                                dbg!("ran callback!!!!!!!!!!!!!!!!!!!!!!4");
+                                //dbg!("ran callback!!!!!!!!!!!!!!!!!!!!!!4");
 
                             let asset_mut = asset.get_mut().unwrap();
                             *asset_mut = res;
-                            let handle = AssetHandleUntype::new(uuid,  &mut dupe(runtime).render_resource_manager);
+                            let handle = AssetHandleUntype::new(uuid, &mut dupe(runtime).render_resource_manager);
 
                             let callbacks = &asset.callbacks;
-                            dbg!(callbacks);
+                            //dbg!(callbacks);
                             for callback in callbacks {
-                                dbg!("ran callback!!!!!!!!!!!!!!!!!!!!!!4!4!44! at thread");
+                                //dbg!("ran callback!!!!!!!!!!!!!!!!!!!!!!4!4!44! at thread");
                                 callback(handle.clone(), dupe(runtime));
                             }
-                            //asset.loaded.store(true, Ordering::SeqCst);
+                            asset.loaded.store(true, Ordering::SeqCst);
                             dbg!("ran end");
 
                         }.boxed();
@@ -345,7 +345,7 @@ pub async fn run() {
             let shader = x.get_typed::<ShaderModule>();
             unsafe { dbg!(shader.get_unchecked()) };
             let shader = unsafe { shader.get_unchecked() };
-            LightMaterial::set_render_pipeline(runtime, shader);
+            LightMaterial::set_render_pipeline(runtime, shader.unwrap());
         }],
     );
     let texture = runtime.render_resource_manager.load_resource(
@@ -442,6 +442,7 @@ pub async fn run() {
 
             let mesh = TextureVertexTemplates::cube(&render.device);
             material.set_mesh(mesh);
+            material.set_texture(texture.clone());
             material.set_instance(render.light_instance_buffer.get().clone());
 
             material.set_instance_value(vec![LightMaterialInstance::new(

@@ -270,6 +270,7 @@ impl MaterialGeneric for LightMaterial {
     }
     fn set_bind_groups<'a>(&'a self, pipeline: &mut RenderPass<'a>, engine: &mut EngineRuntime) {
         let state = engine.get_resource_mut::<RenderManagerResource>();
+
         let texture = self
             .texture
             .get()
