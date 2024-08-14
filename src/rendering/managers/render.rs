@@ -46,7 +46,7 @@ impl EngineRuntime {
         });
 
         for draw_pass in dupe(state).draw_passes.iter_mut() {
-            if draw_pass.is_loaded() {
+            if draw_pass.is_loaded(self) {
                 draw_pass.draw(&mut render_pass, dupe(self));
             }
         }

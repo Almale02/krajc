@@ -371,3 +371,34 @@ impl Future for TextureLoader {
         }
     }
 }
+pub struct MemoryAsset<T> {
+    data: Takeable<T>,
+}
+
+impl<T> MemoryAsset<T> {
+    pub fn new(data: T) -> Self {
+        Self {
+            data: Takeable::new(data),
+        }
+    }
+}
+impl<T> FinalAsset for MemoryAsset<T> {
+    type FinalAsset = T;
+}
+impl<T: Send + Unpin + 'static> Future for MemoryAsset<T> {
+    type Output = Box<dyn Any + Send>;
+
+    fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+        Poll::Ready(Box::new(self.get_mut().data.take().unwrap()))
+    }
+}
+
+impl<T: Send + Unpin + 'static> AssetLoader for MemoryAsset<T> {
+    fn set_engine(&mut self, _engine: SendEngineRuntime) {
+        //
+    }
+
+    fn set_thread_main_exec(&mut self, _tx: flume::Sender<Box<dyn Fn()>>) {
+        //
+    }
+}

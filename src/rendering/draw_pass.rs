@@ -13,7 +13,9 @@ impl DrawPass {
         Self { mat, res_handles }
     }
 
-    pub fn is_loaded(&self) -> bool {
+    pub fn is_loaded(&self, engine: &mut EngineRuntime) -> bool {
+        let mut res_handles = self.res_handles.clone();
+        res_handles.push(self.mat.get_shader_asset_handle(engine));
         for x in self.res_handles.iter() {
             //dbg!(x.is_loaded());
             if !x.is_loaded() {

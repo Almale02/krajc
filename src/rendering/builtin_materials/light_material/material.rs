@@ -1,17 +1,21 @@
-use std::{ops::Range, time::Instant};
+use std::{collections::HashMap, ops::Range, time::Instant};
 
-use bevy_ecs::{
-    entity::Entity,
-    query::{Changed, With},
-};
-use cgmath::Zero;
+use bevy_ecs::{entity::Entity, query::With};
 use krajc::{system_fn, EngineResource, FromEngine};
+use uuid::Uuid;
 use wgpu::{
     BindGroupLayout, Buffer, CompareFunction, DepthBiasState, DepthStencilState, Face, RenderPass,
     RenderPipeline, RenderPipelineDescriptor, ShaderModule, StencilState,
 };
 
-use crate::rendering::asset::AssetHandle;
+use crate::{
+    engine_runtime::schedule_manager::system_params::system_local::Local,
+    rendering::{
+        asset::{AssetHandle, AssetHandleUntype},
+        draw_pass::DrawPass,
+    },
+    ENGINE_RUNTIME,
+};
 #[allow(unused_imports)]
 use crate::{
     engine_runtime::{
@@ -38,7 +42,7 @@ use super::instance_data::{LightMaterialInstance, RawLightMaterialInstance};
 #[derive(FromEngine)]
 pub struct LightMaterial {
     pub instance_count: u32,
-    mesh: Lateinit<Mesh<TextureVertex>>,
+    mesh: AssetHandle<Mesh<TextureVertex>>,
     texture: AssetHandle<Texture>,
     instance_buffer: Lateinit<ManagedBufferInstanceHandle<InstanceBufferType>>,
     camera_layout: Lateinit<&'static wgpu::BindGroupLayout>,
@@ -52,12 +56,14 @@ pub struct LightMaterialResource {
     pub light_layout: BindGroupLayout,
     pub camera_layout: BindGroupLayout,
     pub pipeline: Lateinit<RenderPipeline>,
+    pub shader_asset_handle: AssetHandleUntype,
 }
 
 impl FromEngine for LightMaterialResource {
     fn from_engine(engine: &'static mut EngineRuntime) -> Self {
         let render = engine.get_resource::<RenderManagerResource>();
         Self {
+            shader_asset_handle: AssetHandleUntype::from_engine(engine),
             camera_layout: {
                 render
                     .device
@@ -98,8 +104,8 @@ impl FromEngine for LightMaterialResource {
 }
 
 impl LightMaterial {
-    pub fn set_mesh(&mut self, mesh: Mesh<TextureVertex>) {
-        self.mesh.set(mesh);
+    pub fn set_mesh(&mut self, mesh: AssetHandle<Mesh<TextureVertex>>) {
+        self.mesh = mesh;
     }
     pub fn set_texture(&mut self, texture: AssetHandle<Texture>) {
         self.texture = texture;
@@ -127,9 +133,15 @@ impl LightMaterial {
 
         self.instance_buffer.set_data_vec(collect_part);
     }
-    pub fn set_render_pipeline(engine: &'static mut EngineRuntime, shader: &ShaderModule) {
+    pub fn set_render_pipeline(
+        engine: &'static mut EngineRuntime,
+        shader: &ShaderModule,
+        shader_handle: AssetHandleUntype,
+    ) {
         let render = engine.get_resource_mut::<RenderManagerResource>();
         let material_res = engine.get_resource_mut::<LightMaterialResource>();
+
+        material_res.shader_asset_handle = shader_handle;
 
         let render_pipeline_layout =
             render
@@ -200,28 +212,83 @@ impl LightMaterial {
 
 #[system_fn(RuntimePostPhysicsSyncSchedule)]
 pub fn update_light_material(
-    mut query: SystemQuery<(Entity, &Transform), (With<LightMaterialMarker>, Changed<Transform>)>,
+    mut query: SystemQuery<
+        (
+            Entity,
+            &Transform,
+            &AssetHandle<Texture>,
+            &AssetHandle<Mesh<TextureVertex>>,
+        ),
+        (With<LightMaterialMarker>),
+    >,
     mut render: Res<RenderManagerResource>,
+    mut local_passes: Local<Vec<DrawPass>>,
+    mut instance_buffers: Local<Vec<ManagedBufferInstanceHandle<InstanceBufferType>>>,
 ) {
-    let query = query
+    local_passes.clear();
+    let mut instance_datas: HashMap<
+        (&AssetHandle<Texture>, &AssetHandle<Mesh<TextureVertex>>),
+        Vec<LightMaterialInstance>,
+    > = HashMap::new();
+
+    query
         .iter()
-        .map(|(entity, trans)| {
-            //println!("{:?} has trans: {}", entity, trans.iso);
-            LightMaterialInstance::new(
-                trans.clone().into(),
-                //cgmath::Quaternion::zero(),
-                cgmath::Quaternion::new(
-                    trans.rotation.w,
-                    trans.rotation.i,
-                    trans.rotation.j,
-                    trans.rotation.k,
-                ),
-            )
-        })
-        .collect::<Vec<_>>();
-    if !query.len().is_zero() {
-        //render.light_material.set_instance_value(query)
-    };
+        .for_each(|(_entity, trans, texture_handle, mesh_handle)| {
+            let hash = (texture_handle, mesh_handle);
+
+            match instance_datas.get_mut(&hash) {
+                Some(x) => x.push(LightMaterialInstance::new(
+                    trans.clone().into(),
+                    cgmath::Quaternion::new(
+                        trans.rotation.w,
+                        trans.rotation.i,
+                        trans.rotation.j,
+                        trans.rotation.k,
+                    ),
+                )),
+                None => {
+                    instance_datas.insert(
+                        hash,
+                        vec![LightMaterialInstance::new(
+                            trans.clone().into(),
+                            cgmath::Quaternion::new(
+                                trans.rotation.w,
+                                trans.rotation.i,
+                                trans.rotation.j,
+                                trans.rotation.k,
+                            ),
+                        )],
+                    );
+                }
+            }
+        });
+
+    instance_datas
+        .iter()
+        .enumerate()
+        .for_each(|(idx, ((texture, mesh), value))| {
+            if instance_buffers.len() <= idx {
+                instance_buffers.push(ManagedBufferInstanceHandle::new_with_size(
+                    Uuid::new_v4().to_string(),
+                    1024_u64.pow(2),
+                ));
+            }
+
+            let mut material = LightMaterial::from_engine(unsafe { ENGINE_RUNTIME.get() });
+            material.set_texture((*texture).clone());
+            material.set_mesh((*mesh).clone());
+            material.set_instance(instance_buffers[idx].clone());
+            material.set_instance_value_ref(value.iter().collect());
+
+            let draw_pass = DrawPass::new(
+                Box::new(material),
+                vec![texture.as_untype(), mesh.as_untype()],
+            );
+            local_passes.push(draw_pass);
+            render
+                .draw_passes
+                .push(local_passes.get_mut().last_mut().unwrap());
+        });
 }
 
 impl MaterialGeneric for LightMaterial {
@@ -233,10 +300,10 @@ impl MaterialGeneric for LightMaterial {
         &light_res.pipeline
     }
     fn index_buffer(&self, _engine: &mut EngineRuntime) -> &'static Buffer {
-        &dupe(self).mesh.index_buffer
+        &dupe(self).mesh.get().unwrap().index_buffer
     }
     fn vertex_buffer(&self, _engine: &mut EngineRuntime) -> &'static Buffer {
-        &dupe(self).mesh.vertex_buffer
+        &dupe(self).mesh.get().unwrap().vertex_buffer
     }
     fn instance_buffer(&self, _engine: &mut EngineRuntime) -> &'static Buffer {
         dupe(self).instance_buffer.get_buffer()
@@ -283,10 +350,19 @@ impl MaterialGeneric for LightMaterial {
         pipeline.set_bind_group(2, &self.light_bind_group, &[]);
     }
     fn get_index_range(&self) -> Range<u32> {
-        0..self.mesh.index_list.len() as u32
+        0..self.mesh.get().unwrap().index_list.len() as u32
     }
     fn register_systems(&self, engine: &mut EngineRuntime) {
         //update_light_material!(engine);
+    }
+
+    fn get_shader_asset_handle(
+        &self,
+        engine: &mut EngineRuntime,
+    ) -> crate::rendering::asset::AssetHandleUntype {
+        let a = engine.get_resource::<LightMaterialResource>();
+
+        a.shader_asset_handle.clone()
     }
 }
 

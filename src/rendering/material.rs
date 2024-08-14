@@ -4,6 +4,8 @@ use wgpu::{Buffer, RenderPass, RenderPipeline};
 
 use crate::engine_runtime::EngineRuntime;
 
+use super::asset::AssetHandleUntype;
+
 pub trait MaterialGeneric {
     fn render_pipeline(&mut self, engine: &mut EngineRuntime) -> &RenderPipeline; //
     fn vertex_buffer(&self, engine: &mut EngineRuntime) -> &'static Buffer; //
@@ -14,6 +16,7 @@ pub trait MaterialGeneric {
     fn get_index_range(&self) -> Range<u32>;
     fn get_instance_range(&self) -> Range<u32>;
     fn register_systems(&self, engine: &mut EngineRuntime);
+    fn get_shader_asset_handle(&self, engine: &mut EngineRuntime) -> AssetHandleUntype;
 }
 
 // InstanceGroupCall

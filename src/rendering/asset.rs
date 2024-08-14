@@ -3,6 +3,7 @@ use std::{
     boxed::Box,
     cell::UnsafeCell,
     collections::HashMap,
+    hash::Hash,
     marker::{PhantomData, Send},
     pin::Pin,
     sync::{
@@ -12,11 +13,17 @@ use std::{
     task::{Context, Poll},
 };
 
-use bevy_ecs::ptr::UnsafeCellDeref;
+use bevy_ecs::{component::Component, ptr::UnsafeCellDeref};
 use futures::Future;
 use uuid::Uuid;
 
-use crate::{engine_runtime::EngineRuntime, typed_addr::dupe, FromEngine, Lateinit};
+use crate::{
+    engine_runtime::{
+        schedule_manager::system_params::system_resource::EngineResource, EngineRuntime,
+    },
+    typed_addr::dupe,
+    FromEngine, Lateinit,
+};
 
 use super::asset_loaders::file_resource_loader::SendEngineRuntime;
 
@@ -45,6 +52,18 @@ pub struct AssetManager {
         fn(AssetHandleUntype, &'static mut EngineRuntime),
     )>,
 }
+impl EngineResource for AssetManager {
+    fn get(engine: &'static mut EngineRuntime) -> &'static Self {
+        &engine.asset_manager
+    }
+    fn get_mut(engine: &'static mut EngineRuntime) -> &'static mut Self {
+        &mut engine.asset_manager
+    }
+    fn get_no_init(engine: &'static EngineRuntime) -> &'static Self {
+        &engine.asset_manager
+    }
+}
+unsafe impl Send for AssetManager {}
 pub struct AssetEntrie {
     pub loaded: AtomicBool,
     /// an asset could only be modifed if it is marked as *unloaded*, if it is unloaded then it *cannot* be read,
@@ -178,16 +197,28 @@ impl Default for AssetManager {
         Self::new()
     }
 }
+#[derive(Component)]
 pub struct AssetHandle<T> {
     pub uuid: Uuid,
-    manager: &'static mut AssetManager,
+    manager: SendWrapper<&'static mut AssetManager>,
     _p: PhantomData<T>,
 }
+impl<T> Hash for AssetHandle<T> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.uuid.hash(state);
+    }
+}
+impl<T> PartialEq for AssetHandle<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.uuid.eq(&other.uuid)
+    }
+}
+impl<T> Eq for AssetHandle<T> {}
 impl<T> FromEngine for AssetHandle<T> {
     fn from_engine(engine: &'static mut EngineRuntime) -> Self {
         Self {
             uuid: Uuid::default(),
-            manager: &mut engine.render_resource_manager,
+            manager: SendWrapper::new(&mut engine.asset_manager),
             _p: PhantomData,
         }
     }
@@ -197,7 +228,7 @@ impl<T> Clone for AssetHandle<T> {
     fn clone(&self) -> Self {
         Self {
             uuid: self.uuid,
-            manager: dupe(self.manager),
+            manager: SendWrapper::new(dupe(dupe(self.manager.value))),
             _p: PhantomData,
         }
     }
@@ -205,12 +236,12 @@ impl<T> Clone for AssetHandle<T> {
 
 impl<T: 'static> AssetHandle<T> {
     pub fn as_untype(&self) -> AssetHandleUntype {
-        AssetHandleUntype::new(self.uuid, dupe(self.manager))
+        AssetHandleUntype::new(self.uuid, dupe(self.manager.value))
     }
     pub fn new(uuid: Uuid, manager: &'static mut AssetManager) -> Self {
         Self {
             uuid,
-            manager,
+            manager: SendWrapper { value: manager },
             _p: PhantomData,
         }
     }
@@ -226,7 +257,7 @@ impl<T: 'static> AssetHandle<T> {
         .load(Ordering::SeqCst)*/
     }
 
-    /// this ___MUST___ be only used in *callbacks*
+    /// this ___MUST___ be only used in __callbacks__
     pub unsafe fn get_unchecked(&self) -> Option<&'static T> {
         unsafe {
             dupe(self)
@@ -334,6 +365,14 @@ impl Future for AssetHandleUntype {
                 cx.waker().wake_by_ref();
                 Poll::Pending
             }
+        }
+    }
+}
+impl FromEngine for AssetHandleUntype {
+    fn from_engine(engine: &'static mut EngineRuntime) -> Self {
+        Self {
+            uuid: Uuid::default(),
+            manager: &mut engine.asset_manager,
         }
     }
 }

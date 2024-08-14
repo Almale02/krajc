@@ -10,6 +10,18 @@ where
 {
     pub addr: TypedAddr<T>,
 }
+
+impl<T> Local<T>
+where
+    T: 'static + Default,
+{
+    pub fn get_ref(&self) -> &'static T {
+        self.addr.get()
+    }
+    pub fn get_mut(&self) -> &'static mut T {
+        self.addr.get()
+    }
+}
 impl<T: Default> Deref for Local<T> {
     type Target = T;
 

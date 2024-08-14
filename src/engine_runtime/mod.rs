@@ -29,7 +29,7 @@ pub struct EngineRuntime {
     pub static_resource_map: HashMap<TypeId, usize>,
     pub system_locals: HashMap<&'static str, HashMap<u8, Box<dyn Any>>>,
     pub buffer_manager: BufferManager,
-    pub render_resource_manager: AssetManager,
+    pub asset_manager: AssetManager,
     pub engine_cache: EngineCache,
     pub ecs: EcsManager,
     pub physics: PhysicsWorld,

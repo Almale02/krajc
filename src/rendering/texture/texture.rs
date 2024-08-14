@@ -10,6 +10,7 @@ pub struct Texture {
     pub sampler: wgpu::Sampler,
     pub texture_bind_group: Lateinit<wgpu::BindGroup>,
 }
+unsafe impl Send for Texture {}
 
 impl Texture {
     pub fn get_texture_bind_layout(device: &wgpu::Device) -> BindGroupLayout {

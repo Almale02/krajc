@@ -38,7 +38,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use cgmath::{num_traits::Signed, Deg, Point3, Quaternion, Rad, Vector3, Zero};
+use cgmath::{num_traits::Signed, Deg, Point3, Rad, Vector3};
 
 use rapier3d::na::Vector3 as NaVec3;
 
@@ -60,15 +60,13 @@ use engine_runtime::{
 
 use ordered_float::OrderedFloat;
 use rendering::{
-    asset::{AssetHandleUntype, AssetLoader, SendWrapper},
-    asset_loaders::file_resource_loader::{FileResourceLoader, ShaderLoader, TextureLoader},
-    buffer_manager::{managed_buffer::ManagedBufferGeneric, InstanceBufferType, UniformBufferType},
-    builtin_materials::light_material::{
-        instance_data::LightMaterialInstance,
-        material::{update_light_material, LightMaterial},
+    asset::{AssetHandleUntype, AssetLoader, AssetManager, SendWrapper},
+    asset_loaders::file_resource_loader::{
+        FileResourceLoader, MemoryAsset, ShaderLoader, TextureLoader,
     },
+    buffer_manager::{managed_buffer::ManagedBufferGeneric, InstanceBufferType, UniformBufferType},
+    builtin_materials::light_material::material::{update_light_material, LightMaterial},
     camera::camera::Camera,
-    draw_pass::DrawPass,
     managers::RenderManagerResource,
     mesh::mesh::TextureVertexTemplates,
     systems::general::{make_light_follow_camera, sync_light, Color, Light, Transform},
@@ -106,13 +104,31 @@ pub struct TextureMaterialMarker;
 #[derive(Component)]
 pub struct LightMaterialMarker;
 
-#[system_fn(RuntimeEngineLoadSchedule)]
+#[system_fn]
 fn startup(
     mut world: EcsWorld,
     mut render: Res<RenderManagerResource>,
     mut gravity: Res<Gravity>,
     mut target_fps: Res<TargetFps>,
+    mut asset_manager: Res<AssetManager>,
 ) {
+    let mud = asset_manager.load_resource(
+        FileResourceLoader::<TextureLoader>::new(
+            "resources/image/mud.png",
+            TextureLoader::default(),
+        ),
+        vec![],
+    );
+    let dirt = asset_manager.load_resource(
+        FileResourceLoader::<TextureLoader>::new(
+            "resources/image/dirt/dirt.png",
+            TextureLoader::default(),
+        ),
+        vec![],
+    );
+    let mesh = TextureVertexTemplates::cube(&render.device);
+    let mesh = asset_manager.load_resource(MemoryAsset::new(mesh), vec![]);
+
     target_fps.0 = 90.;
     gravity.0 = NaVec3::new(0.04, -0.5, 0.);
 
@@ -126,6 +142,8 @@ fn startup(
                 world.spawn((
                     Transform::new_vec(Vector::new(x as f32, stack as f32 * 30., y as f32)),
                     LightMaterialMarker,
+                    dirt.clone(),
+                    mesh.clone(),
                     RigidBody::new(RigidBodyType::Dynamic)
                         .linvel(NaVec3::new(0., 2., 0.))
                         .can_sleep(false)
@@ -140,6 +158,8 @@ fn startup(
             world.spawn((
                 Transform::new_vec(Vector::new(x as f32, -6., y as f32)),
                 LightMaterialMarker,
+                mud.clone(),
+                mesh.clone(),
                 RigidBody::new(RigidBodyType::Fixed)
                     .can_sleep(false)
                     .build(),
@@ -179,13 +199,6 @@ fn startup(
             a: 1.,
         }),
     ));
-
-    let render = render.get_static_mut();
-
-    let mesh = TextureVertexTemplates::cube(&render.device);
-    let light_mesh = TextureVertexTemplates::build_cube(&render.device, 0.3, 0.3, 0.3);
-
-    //render.light_material.set_mesh(mesh);
 }
 
 #[system_fn(RuntimeUpdateSchedule)]
@@ -206,7 +219,18 @@ pub async fn run() {
     //dbg!("a");
     let runtime = EngineRuntime::init();
 
-    let thread_rx = runtime.render_resource_manager.thread_rx.clone();
+    runtime
+        .asset_manager
+        .engine
+        .set(unsafe { ENGINE_RUNTIME.get() });
+    runtime
+        .asset_manager
+        .engine_locked
+        .set(Arc::new(RwLock::new(SendWrapper::new(unsafe {
+            ENGINE_RUNTIME.get()
+        }))));
+
+    let thread_rx = runtime.asset_manager.thread_rx.clone();
 
     let thread_runtime = dupe(runtime);
     std::thread::spawn(move || {
@@ -232,7 +256,7 @@ pub async fn run() {
 
                             let asset_mut = asset.get_mut().unwrap();
                             *asset_mut = res;
-                            let handle = AssetHandleUntype::new(uuid, &mut dupe(runtime).render_resource_manager);
+                            let handle = AssetHandleUntype::new(uuid, &mut dupe(runtime).asset_manager);
 
                             let callbacks = &asset.callbacks;
                             //dbg!(callbacks);
@@ -252,17 +276,20 @@ pub async fn run() {
         });
     });
 
+    runtime.asset_manager.load_resource(
+        FileResourceLoader::<ShaderLoader>::new(
+            "resources/shaders/shader_light.wgsl",
+            ShaderLoader::default(),
+        ),
+        vec![|x, runtime| {
+            let shader = x.get_typed::<ShaderModule>();
+            unsafe { dbg!(shader.get_unchecked()) };
+            let shader = unsafe { shader.get_unchecked() };
+            LightMaterial::set_render_pipeline(runtime, shader.unwrap(), x);
+        }],
+    );
+
     runtime.buffer_manager.engine = unsafe { ENGINE_RUNTIME.get() };
-    runtime
-        .render_resource_manager
-        .engine
-        .set(unsafe { ENGINE_RUNTIME.get() });
-    runtime
-        .render_resource_manager
-        .engine_locked
-        .set(Arc::new(RwLock::new(SendWrapper::new(unsafe {
-            ENGINE_RUNTIME.get()
-        }))));
     dupe(runtime)
         .buffer_manager
         .register_new_buffer_type::<UniformBufferType>();
@@ -293,8 +320,6 @@ pub async fn run() {
     .register_system::<RuntimePostPhysicsSyncSchedule>(update_texture_material.into_system());*/
 
     runtime.register_system::<RuntimeUpdateSchedule>(make_light_follow_camera.into_system());
-
-    //collider_systems(runtime);
 
     physics_systems(runtime);
 
@@ -336,25 +361,6 @@ pub async fn run() {
 
     let load = runtime.get_resource_mut::<RuntimeEngineLoadSchedule>();
     load.execute(dupe(runtime));
-    let shader_res = runtime.render_resource_manager.load_resource(
-        FileResourceLoader::<ShaderLoader>::new(
-            "resources/shaders/shader_light.wgsl",
-            ShaderLoader::default(),
-        ),
-        vec![|x, runtime| {
-            let shader = x.get_typed::<ShaderModule>();
-            unsafe { dbg!(shader.get_unchecked()) };
-            let shader = unsafe { shader.get_unchecked() };
-            LightMaterial::set_render_pipeline(runtime, shader.unwrap());
-        }],
-    );
-    let texture = runtime.render_resource_manager.load_resource(
-        FileResourceLoader::<TextureLoader>::new(
-            "resources/image/dirt/dirt.png",
-            TextureLoader::default(),
-        ),
-        vec![],
-    );
 
     //let mut finished = false;
 
@@ -367,14 +373,10 @@ pub async fn run() {
         let frame_start = Instant::now();
         let dt = frame_start - last_render_time;
 
-        while let Ok(req) = runtime.render_resource_manager.main_exec_rx.try_recv() {
+        while let Ok(req) = runtime.asset_manager.main_exec_rx.try_recv() {
             req();
         }
-        while let Ok(req) = runtime
-            .render_resource_manager
-            .loaded_callback_rx
-            .try_recv()
-        {
+        while let Ok(req) = runtime.asset_manager.loaded_callback_rx.try_recv() {
             req.1();
             req.2(req.0, dupe(runtime))
         }
@@ -425,7 +427,7 @@ pub async fn run() {
 
         let frame_start = Instant::now();
 
-        while let Ok(req) = runtime.render_resource_manager.main_exec_rx.try_recv() {
+        while let Ok(req) = runtime.asset_manager.main_exec_rx.try_recv() {
             req();
         }
         runtime.update(dt, start);
@@ -436,7 +438,7 @@ pub async fn run() {
             prev_full_sec = since_start as u64;
         }
         let engine = dupe(runtime);
-        let light_material_pass = dupe(engine).engine_cache.cache("light_draw_pass", || {
+        /*let light_material_pass = dupe(engine).engine_cache.cache("light_draw_pass", || {
             let render = engine.get_resource_mut::<RenderManagerResource>();
             let mut material = LightMaterial::from_engine(engine);
 
@@ -454,8 +456,8 @@ pub async fn run() {
                 Box::new(material),
                 vec![shader_res.as_untype(), texture.as_untype()],
             )
-        });
-        render.get().draw_passes.push(light_material_pass);
+        });*/
+        //render.get().draw_passes.push(light_material_pass);
 
         span!(trace_render, "rendering");
         match runtime.render() {
@@ -468,8 +470,7 @@ pub async fn run() {
 
         let target_fps = runtime.get_resource::<TargetFps>();
 
-        // added 10 to it because it looks like atleaset on my computer that it slows it too much down by around 10 fps
-        let target_frame_time = 1. / (target_fps.0 + 10.);
+        let target_frame_time = 1. / (target_fps.0);
 
         let current_frame_time = frame_start.elapsed().as_secs_f32();
 

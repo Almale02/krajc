@@ -36,6 +36,7 @@ pub struct Mesh<V: Vertex> {
     pub vertex_buffer: Buffer,
     pub index_buffer: Buffer,
 }
+unsafe impl<T: Vertex> Send for Mesh<T> {}
 
 pub struct TextureVertexTemplates;
 impl TextureVertexTemplates {
