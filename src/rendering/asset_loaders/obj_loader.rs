@@ -1,6 +1,5 @@
 use std::{
     future::Future,
-    io::BufRead,
     pin::Pin,
     task::{Context, Poll},
 };
@@ -9,23 +8,22 @@ use mopa::Any;
 use tobj::LoadOptions;
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
-    BufferUsages, Device,
+    BufferUsages,
 };
 
 use crate::{
     rendering::{
         asset::FinalAsset,
+        managers::RenderManagerResource,
         mesh::mesh::{Mesh, TextureVertex},
     },
+    typed_addr::dupe,
     Lateinit,
 };
 
 use super::file_resource_loader::{FileLoadable, SendEngineRuntime};
 
-fn load_obj_to_mesh<B: BufRead>(
-    device: &'static Device,
-    mut reader: &[u8],
-) -> Result<Mesh<TextureVertex>, Box<dyn std::error::Error>> {
+fn load_obj(mut reader: &[u8]) -> Result<(Vec<TextureVertex>, Vec<u16>), tobj::LoadError> {
     let load_result = tobj::load_obj_buf(
         &mut reader,
         &LoadOptions {
@@ -58,28 +56,12 @@ fn load_obj_to_mesh<B: BufRead>(
     let indices: Vec<u16> = mesh.indices.iter().map(|&i| i as u16).collect();
 
     // Create buffers
-    let vertex_buffer = device.create_buffer_init(&BufferInitDescriptor {
-        label: Some("Vertex Buffer"),
-        contents: bytemuck::cast_slice(&vertices),
-        usage: BufferUsages::VERTEX,
-    });
-    let index_buffer = device.create_buffer_init(&BufferInitDescriptor {
-        label: Some("Index Buffer"),
-        contents: bytemuck::cast_slice(&indices),
-        usage: BufferUsages::INDEX,
-    });
-
-    Ok(Mesh {
-        vertex_list: vertices.into_boxed_slice(),
-        index_list: indices.into_boxed_slice(),
-        vertex_buffer,
-        index_buffer,
-    })
+    Ok((vertices, indices))
 }
 
 enum ObjLoaderState {
     Parsing,
-    Ready,
+    WaitingForMain,
 }
 
 pub struct ObjAsset {
@@ -89,7 +71,6 @@ pub struct ObjAsset {
     main_exec_callback_tx: flume::Sender<Box<dyn Any + Send>>,
     main_exec_callback_rx: flume::Receiver<Box<dyn Any + Send>>,
     state: ObjLoaderState,
-    parsed_obj: Option<Mesh<TextureVertex>>,
 }
 
 impl Default for ObjAsset {
@@ -108,7 +89,6 @@ impl ObjAsset {
             main_exec_callback_tx,
             main_exec_callback_rx,
             state: ObjLoaderState::Parsing,
-            parsed_obj: None,
         }
     }
 }
@@ -137,37 +117,68 @@ impl Future for ObjAsset {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = unsafe { self.get_unchecked_mut() };
 
+        let engine = (*dupe(this).engine).try_write();
+
+        if engine.is_err() {
+            return Poll::Pending;
+        }
+        let mut engine = engine.unwrap();
+
         match &this.state {
             ObjLoaderState::Parsing => {
                 // Parse OBJ data
-                match tobj::load_obj_buf(
-                    &mut self.bytes.as_slice(),
-                    &tobj::LoadOptions::default(),
-                    |x| tobj::load_mtl(x),
-                ) {
+                match load_obj(&this.bytes.as_slice()) {
                     Ok(obj) => {
-                        this.parsed_obj = Some(obj);
-                        this.state = ObjLoaderState::Ready;
-                        cx.waker().wake_by_ref();
+                        let obj = obj.clone();
+                        let tx = this.main_exec_callback_tx.clone();
+                        let render = engine.get_resource::<RenderManagerResource>();
+                        this.thread_main_exec_tx
+                            .clone()
+                            .send(Box::new(move || {
+                                let (vertex, index) = obj.clone();
+
+                                let vertex = vertex.into_boxed_slice();
+                                let index = index.into_boxed_slice();
+
+                                let vertex_buffer =
+                                    render.device.create_buffer_init(&BufferInitDescriptor {
+                                        label: Some("Vertex buffer from Obj model"),
+                                        contents: bytemuck::cast_slice(&*vertex),
+                                        usage: BufferUsages::VERTEX,
+                                    });
+                                let index_buffer =
+                                    render.device.create_buffer_init(&BufferInitDescriptor {
+                                        label: Some("Index buffer from Obj model"),
+                                        contents: bytemuck::cast_slice(&*index),
+                                        usage: BufferUsages::VERTEX,
+                                    });
+
+                                let mesh = Mesh::<TextureVertex> {
+                                    vertex_list: vertex,
+                                    index_list: index,
+                                    vertex_buffer,
+                                    index_buffer,
+                                };
+
+                                tx.send(Box::new(mesh)).unwrap();
+                            }))
+                            .unwrap();
+                        this.state = ObjLoaderState::WaitingForMain;
                         Poll::Pending
                     }
                     Err(e) => {
                         eprintln!("Failed to parse OBJ file: {}", e);
-                        this.state = ObjLoaderState::Ready; // Move to Ready state with no result
-                        cx.waker().wake_by_ref();
-                        Poll::Pending
+                        Poll::Ready(Box::new(0))
                     }
                 }
             }
-            ObjLoaderState::Ready => {
-                // Ready to return the result
-                if let Some(parsed_obj) = &this.parsed_obj {
-                    Poll::Ready(Box::new(parsed_obj.clone()) as Box<dyn Any + Send>)
-                } else {
-                    Poll::Ready(Box::new(Obj::default()) as Box<dyn Any + Send>)
-                    // Empty OBJ
+            ObjLoaderState::WaitingForMain => match this.main_exec_callback_rx.try_recv() {
+                Ok(x) => Poll::Ready(x),
+                Err(_) => {
+                    cx.waker().wake_by_ref();
+                    Poll::Pending
                 }
-            }
+            },
         }
     }
 }

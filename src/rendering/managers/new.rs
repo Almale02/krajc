@@ -127,7 +127,7 @@ impl EngineRuntime {
             format: surface_format,
             width: size.width,
             height: size.height,
-            present_mode: PresentMode::Immediate,
+            present_mode: PresentMode::AutoNoVsync,
             alpha_mode: surface_caps.alpha_modes[0],
             view_formats: vec![],
         };
