@@ -297,7 +297,10 @@ impl MaterialGeneric for LightMaterial {
     }
     fn render_pipeline(&mut self, engine: &mut EngineRuntime) -> &RenderPipeline {
         let light_res = engine.get_resource_mut::<LightMaterialResource>();
-        &light_res.pipeline
+        light_res
+            .pipeline
+            .as_option()
+            .expect("mateiral was rendered before the shader was loader")
     }
     fn index_buffer(&self, _engine: &mut EngineRuntime) -> &'static Buffer {
         &dupe(self).mesh.get().unwrap().index_buffer

@@ -61,11 +61,14 @@ use engine_runtime::{
 use ordered_float::OrderedFloat;
 use rendering::{
     asset::{AssetHandleUntype, AssetLoader, AssetManager, SendWrapper},
-    asset_loaders::file_resource_loader::{
-        FileResourceLoader, MemoryAsset, ShaderLoader, TextureLoader,
+    asset_loaders::{
+        file_resource_loader::{FileResourceLoader, MemoryAsset, ShaderLoader, TextureLoader},
+        obj_loader::ObjAsset,
     },
     buffer_manager::{managed_buffer::ManagedBufferGeneric, InstanceBufferType, UniformBufferType},
-    builtin_materials::light_material::material::{update_light_material, LightMaterial},
+    builtin_materials::light_material::material::{
+        update_light_material, LightMaterial, LightMaterialResource,
+    },
     camera::camera::Camera,
     managers::RenderManagerResource,
     mesh::mesh::TextureVertexTemplates,
@@ -126,6 +129,13 @@ fn startup(
         ),
         vec![],
     );
+    let dick = asset_manager.load_resource(
+        FileResourceLoader::<ObjAsset>::new(
+            "resources/meshes/sphere_high_res.obj",
+            ObjAsset::default(),
+        ),
+        vec![],
+    );
     let mesh = TextureVertexTemplates::cube(&render.device);
     let mesh = asset_manager.load_resource(MemoryAsset::new(mesh), vec![]);
 
@@ -139,13 +149,16 @@ fn startup(
     for stack in 0..stack {
         for y in 0..height {
             for x in 0..width {
+                if x % 2 != 1 || y % 2 != 0 {
+                    continue;
+                }
                 world.spawn((
                     Transform::new_vec(Vector::new(x as f32, stack as f32 * 30., y as f32)),
                     LightMaterialMarker,
                     dirt.clone(),
-                    mesh.clone(),
+                    dick.clone(),
                     RigidBody::new(RigidBodyType::Dynamic)
-                        .linvel(NaVec3::new(0., 2., 0.))
+                        .linvel(NaVec3::new(0., 0., 0.))
                         .can_sleep(false)
                         .build(),
                     Collider::new(ColliderShape::ball(0.5)).build(),
@@ -153,8 +166,8 @@ fn startup(
             }
         }
     }
-    for y in 0..32 {
-        for x in 0..32 {
+    for y in 0..64 {
+        for x in 0..64 {
             world.spawn((
                 Transform::new_vec(Vector::new(x as f32, -6., y as f32)),
                 LightMaterialMarker,
@@ -276,7 +289,7 @@ pub async fn run() {
         });
     });
 
-    runtime.asset_manager.load_resource(
+    let shader = runtime.asset_manager.load_resource(
         FileResourceLoader::<ShaderLoader>::new(
             "resources/shaders/shader_light.wgsl",
             ShaderLoader::default(),
@@ -361,6 +374,10 @@ pub async fn run() {
 
     let load = runtime.get_resource_mut::<RuntimeEngineLoadSchedule>();
     load.execute(dupe(runtime));
+
+    runtime
+        .get_resource_mut::<LightMaterialResource>()
+        .shader_asset_handle = shader.as_untype();
 
     //let mut finished = false;
 

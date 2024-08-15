@@ -1,10 +1,10 @@
 use std::{
+    any::Any,
     future::Future,
     pin::Pin,
     task::{Context, Poll},
 };
 
-use mopa::Any;
 use tobj::LoadOptions;
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
@@ -146,11 +146,12 @@ impl Future for ObjAsset {
                                         contents: bytemuck::cast_slice(&*vertex),
                                         usage: BufferUsages::VERTEX,
                                     });
+                                //
                                 let index_buffer =
                                     render.device.create_buffer_init(&BufferInitDescriptor {
                                         label: Some("Index buffer from Obj model"),
                                         contents: bytemuck::cast_slice(&*index),
-                                        usage: BufferUsages::VERTEX,
+                                        usage: BufferUsages::INDEX,
                                     });
 
                                 let mesh = Mesh::<TextureVertex> {

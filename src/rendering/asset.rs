@@ -323,7 +323,7 @@ impl<T: 'static> Future for AssetHandle<T> {
 }
 
 pub struct AssetHandleUntype {
-    uuid: Uuid,
+    pub uuid: Uuid,
     manager: &'static mut AssetManager,
 }
 
