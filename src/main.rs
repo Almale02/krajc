@@ -3,7 +3,7 @@
 #![allow(macro_expanded_macro_exports_accessed_by_absolute_paths)]
 #![feature(stmt_expr_attributes)]
 #![feature(async_closure)]
-#![deny(unused_imports)]
+//#![deny(unused_imports)]
 #![allow(clippy::type_complexity)]
 
 use crate::rendering::systems::general::update_rendering;
@@ -14,7 +14,7 @@ use krajc::system_fn;
 use physics::{
     components::{
         collider::Collider,
-        general::{PhysicsSyncDirectBodyModifications, RigidBody},
+        general::{PhysicsDontSyncRotation, PhysicsSyncDirectBodyModifications, RigidBody},
     },
     systems::rigid_body::physics_systems,
     Gravity,
@@ -129,11 +129,15 @@ fn startup(
         ),
         vec![],
     );
-    let dick = asset_manager.load_resource(
-        FileResourceLoader::<ObjAsset>::new(
-            "resources/meshes/sphere_high_res.obj",
-            ObjAsset::default(),
+    let stone = asset_manager.load_resource(
+        FileResourceLoader::<TextureLoader>::new(
+            "resources/image/stone/stone.png",
+            TextureLoader::default(),
         ),
+        vec![],
+    );
+    let sphere = asset_manager.load_resource(
+        FileResourceLoader::<ObjAsset>::new("resources/meshes/monkey.obj", ObjAsset::default()),
         vec![],
     );
     let mesh = TextureVertexTemplates::cube(&render.device);
@@ -154,24 +158,26 @@ fn startup(
                 }
                 world.spawn((
                     Transform::new_vec(Vector::new(x as f32, stack as f32 * 30., y as f32)),
-                    LightMaterialMarker,
+                    //LightMaterialMarker,
                     dirt.clone(),
-                    dick.clone(),
-                    RigidBody::new(RigidBodyType::Dynamic)
+                    sphere.clone(),
+                    /*RigidBody::new(RigidBodyType::Dynamic)
                         .linvel(NaVec3::new(0., 0., 0.))
                         .can_sleep(false)
                         .build(),
-                    Collider::new(ColliderShape::ball(0.5)).build(),
+                    Collider::new(ColliderShape::ball(0.5)).build()*/
                 ));
             }
         }
     }
-    for y in 0..64 {
-        for x in 0..64 {
+    for y in 0..128 {
+        for x in 0..128 {
+            let x = x - 64;
+            let y = y - 64;
             world.spawn((
                 Transform::new_vec(Vector::new(x as f32, -6., y as f32)),
                 LightMaterialMarker,
-                mud.clone(),
+                stone.clone(),
                 mesh.clone(),
                 RigidBody::new(RigidBodyType::Fixed)
                     .can_sleep(false)
@@ -197,12 +203,14 @@ fn startup(
             .build(),
         Collider::new(ColliderShape::ball(3.)).density(1.).build(),
         PhysicsSyncDirectBodyModifications,
-        //PhysicsDontSyncRotation,
+        PhysicsDontSyncRotation,
     ));
 
     world.spawn((
         RigidBody::new(RigidBodyType::Dynamic).build(),
         TextureMaterialMarker,
+        sphere.clone(),
+        stone.clone(),
         Light,
         Transform::new_vec(NaVec3::new(0., 10., 0.)),
         Color(wgpu::Color {

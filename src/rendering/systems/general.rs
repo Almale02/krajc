@@ -87,7 +87,7 @@ pub struct Light;
 #[derive(Component)]
 pub struct Color(pub wgpu::Color);
 
-#[system_fn(RuntimeUpdateSchedule)]
+#[system_fn]
 pub fn sync_light(
     mut render_state: Res<RenderManagerResource>,
     mut light: SystemQuery<(&Transform, &Color), With<Light>>,
@@ -114,20 +114,21 @@ pub fn sync_light(
         .light_buffer
         .set_data(*render_state.light_uniform);
 }
-#[system_fn(RuntimeUpdateSchedule)]
+#[system_fn]
 pub fn make_light_follow_camera(
     mut camera: SystemQuery<&Transform, With<Camera>>,
     mut light: SystemQuery<(&mut Transform, &mut LinearVelocity), With<Light>>,
 ) {
-    let (camera) = camera.single().iso;
-    let (light, mut lin_vel) = match light.get_single_mut() {
+    let camera = camera.single().iso;
+    let (mut light, mut lin_vel) = match light.get_single_mut() {
         Ok(x) => x,
         Err(_) => return,
     };
+    //dbg!(light.translation);
+    //dbg!(camera.translation);
 
-    let light = light.iso;
+    let light = &mut light.iso;
 
-    let dir = camera.translation.vector - light.translation.vector;
-
-    lin_vel.0 = dir * 0.12;
+    light.translation.x = camera.translation.x;
+    light.translation.z = camera.translation.z;
 }
