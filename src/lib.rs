@@ -115,7 +115,7 @@ fn impl_res(ast: &syn::DeriveInput) -> TokenStream {
     use std::any::TypeId;*/
 
 
-    impl EngineResource for #name {
+    impl crate::engine_runtime::schedule_manager::system_params::system_resource::EngineResource for #name {
         fn get_mut(engine: &mut crate::EngineRuntime) -> &'static mut Self {
             crate::TypedAddr::new({
                 let op = engine.static_resource_map.get_mut(&std::any::TypeId::of::<Self>());

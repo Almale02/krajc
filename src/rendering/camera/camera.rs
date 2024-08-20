@@ -1,7 +1,6 @@
+use crate::{rendering::systems::general::Vector, UnitQuaternion};
 use bevy_ecs::component::Component;
-use cgmath::{perspective, InnerSpace, Matrix4, Rad};
-//use cgmath::*;
-use rapier3d::na::UnitQuaternion;
+use rapier3d::na::{Isometry3, Matrix3, Matrix4, Point3, Rotation3};
 use std::f32::consts::FRAC_PI_2;
 use winit::{
     dpi::PhysicalPosition,
@@ -13,7 +12,7 @@ use crate::rendering::systems::general::Transform;
 pub const SAFE_FRAC_PI_2: f32 = FRAC_PI_2 - 0.0001;
 
 #[rustfmt::skip]
-    pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
+    pub const OPENGL_TO_WGPU_MATRIX: Matrix4<f32> = Matrix4::new(
         1.0, 0.0, 0.0, 0.0,
         0.0, 1.0, 0.0, 0.0,
         0.0, 0.0, 0.5, 0.5,
@@ -21,37 +20,74 @@ pub const SAFE_FRAC_PI_2: f32 = FRAC_PI_2 - 0.0001;
     );
 
 #[derive(Default, Component)]
-pub struct Camera;
+pub struct Camera {
+    pub forward: Vector,
+    pub up: Vector,
+    pub right: Vector,
+    pub rot_matrix: Matrix3<f32>,
+    pub quat: UnitQuaternion<f32>,
+}
 
 impl Camera {
-    pub fn calc_matrix(iso: &mut Transform) -> Matrix4<f32> {
-        let (sin_pitch, cos_pitch) = iso.rotation.euler_angles().1.sin_cos();
-        let (sin_yaw, cos_yaw) = iso.rotation.euler_angles().2.sin_cos();
+    pub fn new() -> Self {
+        Self::default()
+    }
 
-        Matrix4::look_to_rh(
-            cgmath::Point3 {
-                x: iso.translation.x,
-                y: iso.translation.y,
-                z: iso.translation.z,
-            },
-            cgmath::Vector3::new(cos_pitch * cos_yaw, sin_pitch, cos_pitch * sin_yaw).normalize(),
-            cgmath::Vector3::unit_y(),
+    #[rustfmt::skip]
+    pub fn calc_view_matrix(iso: &mut Transform) -> Matrix4<f32> {
+
+        let (_roll, pitch, yaw) = iso.rotation.euler_angles();
+
+        // Compute sin and cos for pitch and yaw
+        let (sin_pitch, cos_pitch) = pitch.sin_cos();
+        let (sin_yaw, cos_yaw) = yaw.sin_cos();
+
+        // Create rotation matrices
+        let rotation_yaw = Matrix3::new(
+            cos_yaw, 0.0, -sin_yaw,
+            0.0, 1.0, 0.0,
+            sin_yaw, 0.0, cos_yaw,
+        );
+
+        let rotation_pitch = Matrix3::new(
+            1.0, 0.0, 0.0,
+            0.0, cos_pitch, sin_pitch, // Inverted sign for pitch
+            0.0, -sin_pitch, cos_pitch, // Inverted sign for pitch
+        );
+
+        // Combine yaw and pitch rotations (yaw first, then pitch)
+        let rotation_matrix = rotation_yaw * rotation_pitch;
+
+
+        let forward = rotation_matrix * (-Vector::z());
+
+        
+        let target = iso.translation.vector + forward;
+        
+
+        Isometry3::look_at_rh(
+            &Point3::from(iso.translation.vector),
+            &Point3::from(
+                target
+            ),
+            &Vector::y(),
         )
+        .to_homogeneous()
     }
 }
 
 pub struct Projection {
     aspect: f32,
-    fovy: Rad<f32>,
+    fovy: f32,
     znear: f32,
     zfar: f32,
 }
 
 impl Projection {
-    pub fn new<F: Into<Rad<f32>>>(width: u32, height: u32, fovy: F, znear: f32, zfar: f32) -> Self {
+    pub fn new(width: u32, height: u32, fovy: f32, znear: f32, zfar: f32) -> Self {
         Self {
             aspect: width as f32 / height as f32,
-            fovy: fovy.into(),
+            fovy,
             znear,
             zfar,
         }
@@ -61,8 +97,11 @@ impl Projection {
         self.aspect = width as f32 / height as f32;
     }
 
-    pub fn calc_matrix(&self) -> Matrix4<f32> {
-        OPENGL_TO_WGPU_MATRIX * perspective(self.fovy, self.aspect, self.znear, self.zfar)
+    pub fn projection_matrix(&self) -> Matrix4<f32> {
+        //rapier3d::na::Perspective3::new(, , , )
+
+        OPENGL_TO_WGPU_MATRIX
+            * Matrix4::new_perspective(self.aspect, self.fovy, self.znear, self.zfar)
     }
 }
 
@@ -77,9 +116,7 @@ pub struct CameraUniform {
 
 impl CameraUniform {
     pub fn update_view_proj(&mut self, iso: &mut Transform, projection: &Projection) {
-        let pos = cgmath::Point3::new(iso.translation.x, iso.translation.y, iso.translation.z);
-        //self.view_pos = pos.to_homogeneous().into();
-        self.view_proj = (projection.calc_matrix() * Camera::calc_matrix(iso)).into();
+        self.view_proj = (projection.projection_matrix() * Camera::calc_view_matrix(iso)).into();
     }
 }
 
@@ -170,9 +207,37 @@ impl CameraController {
         };
     }
 
-    pub fn update_camera(&mut self, iso: &mut Transform, dt: f64) {
-        let mut yaw = iso.rotation.euler_angles().2;
+    pub fn update_camera(&mut self, iso: &mut Transform, dt: f64, camera: &mut Camera, camera_rot_text: &mut String) {
         let mut pitch = iso.rotation.euler_angles().1;
+        let mut yaw = iso.rotation.euler_angles().2;
+
+        // Compute sin and cos for pitch and yaw
+        let (sin_pitch, cos_pitch) = pitch.sin_cos();
+        let (sin_yaw, cos_yaw) = yaw.sin_cos();
+
+        // Create rotation matrices
+        let rotation_yaw = Matrix3::new(
+            cos_yaw, 0.0, -sin_yaw,
+            0.0, 1.0, 0.0,
+            sin_yaw, 0.0, cos_yaw,
+        );
+
+        let rotation_pitch = Matrix3::new(
+            1.0, 0.0, 0.0,
+            0.0, cos_pitch, sin_pitch,
+            0.0, -sin_pitch, cos_pitch,
+        );
+
+        // Combine yaw and pitch rotations (yaw first, then pitch)
+        let rotation_matrix = rotation_yaw * rotation_pitch;
+        let rotation_quat = UnitQuaternion::from_rotation_matrix(&Rotation3::from_matrix(&rotation_matrix));
+
+
+        let forward = rotation_quat * (-Vector::z());
+        let forward_no_up = Vector::new(forward.x, 0., forward.z).normalize();
+        let right = rotation_quat * Vector::x();
+
+        
 
         let dt = dt as f32;
         if self.sprinting {
@@ -180,15 +245,11 @@ impl CameraController {
         } else {
             self.speed = self.base_speed
         }
-        let mut cam_pos =
-            cgmath::Vector3::new(iso.translation.x, iso.translation.y, iso.translation.z);
+        let mut cam_pos = Vector::new(iso.translation.x, iso.translation.y, iso.translation.z);
 
         // Move forward/backward and left/right
         let (yaw_sin, yaw_cos) = yaw.sin_cos();
-        let forward = cgmath::Vector3::new(yaw_cos, 0.0, yaw_sin).normalize();
-        let right = cgmath::Vector3::new(-yaw_sin, 0.0, yaw_cos).normalize();
-        cam_pos +=
-            forward * ((self.amount_forward - self.amount_backward) * self.speed * dt).into();
+        cam_pos += forward_no_up * ((self.amount_forward - self.amount_backward) * self.speed * dt);
         cam_pos += right * (self.amount_right - self.amount_left) * self.speed * dt;
 
         // Move in/out (aka. "zoom")
@@ -197,7 +258,7 @@ impl CameraController {
         // to get closer to an object you want to focus on.
         let (pitch_sin, pitch_cos) = pitch.sin_cos();
         let scrollward =
-            cgmath::Vector3::new(pitch_cos * yaw_cos, pitch_sin, pitch_cos * yaw_sin).normalize();
+            Vector::new(pitch_cos * yaw_cos, pitch_sin, pitch_cos * yaw_sin).normalize();
         cam_pos += scrollward * self.scroll * self.speed * self.sensitivity * dt;
         self.scroll = 0.0;
 
@@ -206,8 +267,8 @@ impl CameraController {
         cam_pos.y += (self.amount_up - self.amount_down) * self.speed * dt;
 
         // Rotate
-        yaw += (Rad(self.rotate_horizontal) * self.sensitivity * dt).0;
-        pitch += (Rad(-self.rotate_vertical) * self.sensitivity * dt).0;
+        yaw += (self.rotate_horizontal) * self.sensitivity * dt * 0.4;
+        pitch += (self.rotate_vertical) * self.sensitivity * dt * 0.4;
 
         // If process_mouse isn't called every frame, these values
         // will not get set to zero, and the camera will rotate
@@ -215,16 +276,24 @@ impl CameraController {
         self.rotate_horizontal = 0.0;
         self.rotate_vertical = 0.0;
 
-        // Keep the camera's angle from going too high/low.
-        if pitch < -Rad(SAFE_FRAC_PI_2).0 {
-            pitch = -Rad(SAFE_FRAC_PI_2).0;
-        } else if pitch > Rad(SAFE_FRAC_PI_2).0 {
-            pitch = Rad(SAFE_FRAC_PI_2).0;
-        }
         iso.translation.x = cam_pos.x;
         iso.translation.y = cam_pos.y;
         iso.translation.z = cam_pos.z;
 
         iso.rotation = UnitQuaternion::from_euler_angles(0., pitch, yaw);
+
+        *camera_rot_text = format!(
+            "camera rotation: yaw: {:.2}°, pitch: {:.2}°",
+            yaw.to_degrees(),
+            pitch.to_degrees()
+        );
+
+
+        camera.forward = forward;
+        camera.up = Vector::y();
+        camera.right = right;
+        camera.rot_matrix = rotation_matrix;
+        camera.quat = rotation_quat;
+
     }
 }

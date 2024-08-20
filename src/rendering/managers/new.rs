@@ -1,13 +1,14 @@
-use cgmath::Vector3;
-
+use glyphon::{Buffer, FontSystem, Metrics, SwashCache, TextAtlas, TextRenderer};
 use wgpu::*;
 use winit::window::Window;
 
+use crate::rendering::buffer_manager::StorageBufferType;
+use crate::rendering::lights::{IndexUniform, PointLightUniform, SpotLightUniform};
+use crate::typed_addr::dupe;
 use crate::{
     engine_runtime::EngineRuntime,
     rendering::{
         buffer_manager::managed_buffer::ManagedBufferInstanceHandle,
-        builtin_materials::light_material::material::LightUniform,
         camera::camera::{CameraController, CameraUniform, Projection},
         texture::texture::Texture,
     },
@@ -16,6 +17,58 @@ use crate::{
 
 use super::RenderManagerResource;
 
+pub struct TextState {
+    pub swapchain_format: TextureFormat,
+    pub config: SurfaceCapabilities,
+    pub font_system: &'static mut FontSystem,
+    pub cahce: SwashCache,
+    pub atlas: &'static mut TextAtlas,
+    pub text_render: TextRenderer,
+    pub buffer: Buffer,
+}
+impl TextState {
+    pub fn new(render: &'static mut RenderManagerResource) -> Self {
+        let format = TextureFormat::Bgra8UnormSrgb;
+        let atlas = Box::leak(Box::new(TextAtlas::new(
+            &render.device,
+            &render.queue,
+            format,
+        )));
+        let font_system = Box::leak(Box::new(FontSystem::new()));
+
+        Self {
+            swapchain_format: format,
+            config: wgpu::SurfaceCapabilities {
+                formats: vec![format],
+                present_modes: vec![PresentMode::AutoNoVsync],
+                alpha_modes: vec![CompositeAlphaMode::Opaque],
+                usages: TextureUsages::RENDER_ATTACHMENT,
+            },
+            font_system: dupe(font_system),
+            cahce: SwashCache::new(),
+            atlas: dupe(atlas),
+            text_render: TextRenderer::new(
+                atlas,
+                &render.device,
+                MultisampleState::default(),
+                None,
+            ),
+            buffer: {
+                let mut buffer = Buffer::new(font_system, Metrics::new(18., 18.));
+
+                buffer.set_size(
+                    font_system,
+                    render.size.width as f32,
+                    render.size.height as f32,
+                );
+                //buffer.set_text(font_system, "Hello world! 👋\nThis is rendered with 🦅 glyphon 🦁\nThe text below should be partially clipped.\na b c d e f g h i j k l m n o p q mamr s t u v w x y z", Attrs::new().family(Family::SansSerif), Shaping::Advanced);
+                buffer.shape_until_scroll(font_system);
+                buffer
+            },
+        }
+    }
+}
+
 impl EngineRuntime {
     pub async fn init_rendering(&mut self, window: Window) {
         let size = window.inner_size();
@@ -23,7 +76,7 @@ impl EngineRuntime {
         // The instance is a handle to our GPU
         // Backends::all => Vulkan + Metal + DX12 + Browser WebGPU
         let instance = Instance::new(InstanceDescriptor {
-            backends: Backends::all(),
+            backends: Backends::PRIMARY | Backends::SECONDARY,
             ..Default::default()
         });
 
@@ -77,8 +130,10 @@ impl EngineRuntime {
 
         let camera_uniform = CameraUniform::default();
 
-        let light_uniform =
-            LightUniform::new([0., 30., 50.], [1., 1., 1.], Vector3::unit_x().into());
+        let point_light_uniform: Vec<PointLightUniform> = Vec::new();
+        let point_light_count_uniform = IndexUniform::new(0);
+        let spot_light_uniform: Vec<SpotLightUniform> = Vec::new();
+        let spot_light_count_uniform = IndexUniform::new(0);
 
         let render_state = self.get_resource_mut::<RenderManagerResource>();
 
@@ -97,14 +152,28 @@ impl EngineRuntime {
             );
 
         let camera_buffer = ManagedBufferInstanceHandle::<UniformBufferType>::new_with_init(
-            "camera_buffer".to_owned(),
+            "camera_buffer",
             camera_uniform,
         );
 
-        let light_buffer = ManagedBufferInstanceHandle::<UniformBufferType>::new_with_init(
-            "light_buffer".into(),
-            light_uniform,
+        let point_light_buffer = ManagedBufferInstanceHandle::<StorageBufferType>::new_with_size(
+            "point_light_buffer".to_owned(),
+            std::mem::size_of::<PointLightUniform>() as u64,
         );
+        let point_light_count_buffer =
+            ManagedBufferInstanceHandle::<UniformBufferType>::new_with_init(
+                "point_light_count_buffer",
+                point_light_count_uniform,
+            );
+        let spot_light_buffer = ManagedBufferInstanceHandle::<StorageBufferType>::new_with_size(
+            "spot_light_buffer".to_owned(),
+            std::mem::size_of::<SpotLightUniform>() as u64,
+        );
+        let spot_light_count_buffer =
+            ManagedBufferInstanceHandle::<UniformBufferType>::new_with_init(
+                "spot_light_count_buffer",
+                spot_light_count_uniform,
+            );
         let mut texture =
             Texture::from_path("resources/image/dirt/dirt.png", device, &queue).expect("failed");
 
@@ -140,18 +209,22 @@ impl EngineRuntime {
             cgmath::Deg(-90.0).into(),
             cgmath::Deg(-20.0).into(),
         );*/
-        let projection =
-            Projection::new(config.width, config.height, cgmath::Deg(45.0), 0.1, 100.0);
+        let projection = Projection::new(
+            config.width,
+            config.height,
+            60_f32.to_radians(),
+            0.1,
+            1000.0,
+        );
         let camera_controller = CameraController::new(4.0, 0.4);
 
-        let depth_texture = Texture::create_depth_texture(&device, &config, "Depth Texture");
+        let depth_texture = Texture::create_depth_texture(device, &config, "Depth Texture");
 
         render_state.window.set(window);
         render_state.surface.set(surface);
         render_state.queue.set(queue);
         render_state.config.set(config);
         render_state.size.set(size);
-        render_state.texture.set(texture);
         render_state.depth_texture.set(depth_texture);
         render_state
             .light_instance_buffer
@@ -165,9 +238,21 @@ impl EngineRuntime {
         render_state.camera_buffer.set(camera_buffer);
         render_state.clear_color.set(Color::BLACK);
 
-        render_state.light_uniform.set(light_uniform);
-        render_state.light_buffer.set(light_buffer);
+        render_state.point_light_buffer.set(point_light_buffer);
+        render_state.spot_light_buffer.set(spot_light_buffer);
 
-        //dbg!(render_state.light_instance_buffer.get_buffer().size());
+        render_state.point_light_uniform.set(point_light_uniform);
+        render_state.spot_light_uniform.set(spot_light_uniform);
+
+        render_state
+            .point_light_count_buffer
+            .set(point_light_count_buffer);
+        render_state
+            .spot_light_count_buffer
+            .set(spot_light_count_buffer);
+
+        render_state
+            .text_state
+            .set(TextState::new(dupe(render_state)));
     }
 }

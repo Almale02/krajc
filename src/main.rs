@@ -3,13 +3,14 @@
 #![allow(macro_expanded_macro_exports_accessed_by_absolute_paths)]
 #![feature(stmt_expr_attributes)]
 #![feature(async_closure)]
-//#![deny(unused_imports)]
+#![deny(unused_imports)]
 #![allow(clippy::type_complexity)]
 
 use crate::rendering::systems::general::update_rendering;
 
-use bevy_ecs::component::Component;
+use bevy_ecs::query::With;
 use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
+use gilrs::Gilrs;
 use krajc::system_fn;
 use physics::{
     components::{
@@ -38,15 +39,13 @@ use std::{
     time::{Duration, Instant},
 };
 
-use cgmath::{num_traits::Signed, Deg, Point3, Rad, Vector3};
-
 use rapier3d::na::Vector3 as NaVec3;
 
-use engine_runtime::schedule_manager::{
+use engine_runtime::{input::{KeyboardInput as KeyInput, MouseInput}, schedule_manager::{
     runtime_schedule::RuntimePostUpdateSchedule,
     schedule::{IntoSystem, Schedule as _},
-    system_params::system_param::FunctionSystem,
-};
+    system_params::{system_param::FunctionSystem, system_query::SystemQuery},
+}};
 use engine_runtime::{
     schedule_manager::{
         runtime_schedule::{
@@ -65,14 +64,19 @@ use rendering::{
         file_resource_loader::{FileResourceLoader, MemoryAsset, ShaderLoader, TextureLoader},
         obj_loader::ObjAsset,
     },
-    buffer_manager::{managed_buffer::ManagedBufferGeneric, InstanceBufferType, UniformBufferType},
+    buffer_manager::{
+        managed_buffer::ManagedBufferGeneric, InstanceBufferType, StorageBufferType,
+        UniformBufferType,
+    },
     builtin_materials::light_material::material::{
         update_light_material, LightMaterial, LightMaterialResource,
     },
     camera::camera::Camera,
+    lights::{LightLookDirText, PointLight, SpotLight},
     managers::RenderManagerResource,
     mesh::mesh::TextureVertexTemplates,
-    systems::general::{make_light_follow_camera, sync_light, Color, Light, Transform},
+    systems::general::{make_light_follow_camera, sync_light, CameraRotText, Color, Transform},
+    text::{update_debug_text, DebugText, DebugTextProducer, FpsText, MouseMotionText},
 };
 
 use wgpu::{BufferUsages, ShaderModule, SurfaceError};
@@ -96,16 +100,14 @@ pub mod typed_addr;
 #[global_allocator]
 static ALLOC: GlobalAllocatorSampled = GlobalAllocatorSampled::new(100);*/
 
+pub static mut CAMERA_ROT: (f32, f32) = (0., 0.0);
+
 #[tokio::main]
 async fn main() {
     run().await
 }
 
-#[derive(Component)]
-pub struct TextureMaterialMarker;
-
-#[derive(Component)]
-pub struct LightMaterialMarker;
+marker_comps!(TextureMaterialMarker, LightMaterialMarker, ArrowEntity);
 
 #[system_fn]
 fn startup(
@@ -114,6 +116,7 @@ fn startup(
     mut gravity: Res<Gravity>,
     mut target_fps: Res<TargetFps>,
     mut asset_manager: Res<AssetManager>,
+    mut text_producer: Res<DebugTextProducer>,
 ) {
     let mud = asset_manager.load_resource(
         FileResourceLoader::<TextureLoader>::new(
@@ -136,8 +139,12 @@ fn startup(
         ),
         vec![],
     );
-    let sphere = asset_manager.load_resource(
+    let monkey = asset_manager.load_resource(
         FileResourceLoader::<ObjAsset>::new("resources/meshes/monkey.obj", ObjAsset::default()),
+        vec![],
+    );
+    let arrow = asset_manager.load_resource(
+        FileResourceLoader::<ObjAsset>::new("resources/meshes/arrow.obj", ObjAsset::default()),
         vec![],
     );
     let mesh = TextureVertexTemplates::cube(&render.device);
@@ -160,7 +167,7 @@ fn startup(
                     Transform::new_vec(Vector::new(x as f32, stack as f32 * 30., y as f32)),
                     //LightMaterialMarker,
                     dirt.clone(),
-                    sphere.clone(),
+                    monkey.clone(),
                     /*RigidBody::new(RigidBodyType::Dynamic)
                         .linvel(NaVec3::new(0., 0., 0.))
                         .can_sleep(false)
@@ -170,6 +177,28 @@ fn startup(
             }
         }
     }
+    world.spawn((
+        //ArrowEntity,
+        Transform::new_vec(Vector::new(0., 6., 0.)),
+        LightMaterialMarker,
+        monkey.clone(),
+        dirt.clone(),
+    ));
+
+    world.spawn((text_producer.create_text("fps: -69"), FpsText));
+    world.spawn((
+        text_producer.create_text("camera_rot_text_not_set"),
+        CameraRotText,
+    ));
+    world.spawn((text_producer.create_text("idk"), LightLookDirText));
+    world.spawn((
+        text_producer.create_text("you are in the hell! :)"),
+        PlayerPositionText,
+    ));
+    world.spawn((
+        text_producer.create_text(""),
+        MouseMotionText,
+    ));
     for y in 0..128 {
         for x in 0..128 {
             let x = x - 64;
@@ -188,15 +217,11 @@ fn startup(
     }
 
     let trans = Translation::new(0., 5., 10.);
-    let quat = UnitQuaternion::from_euler_angles(
-        0.,
-        std::convert::Into::<Rad<f32>>::into(Deg(-90.)).0,
-        std::convert::Into::<Rad<f32>>::into(Deg(-20.)).0,
-    );
+    let quat = UnitQuaternion::from_euler_angles(0., 90_f32.to_radians(), -20_f32.to_radians());
 
     world.spawn((
         Transform::new(Isometry3::from_parts(trans, quat)),
-        Camera,
+        Camera::default(),
         RigidBody::new(RigidBodyType::Fixed)
             .can_sleep(false)
             //.linvel(NaVec3::new(0., -2., 0.))
@@ -207,12 +232,18 @@ fn startup(
     ));
 
     world.spawn((
-        RigidBody::new(RigidBodyType::Dynamic).build(),
-        TextureMaterialMarker,
-        sphere.clone(),
-        stone.clone(),
-        Light,
-        Transform::new_vec(NaVec3::new(0., 10., 0.)),
+        PointLight::new(0.4),
+        Transform::new_vec(NaVec3::new(0., 2., 0.)),
+        Color(wgpu::Color {
+            r: 1.,
+            g: 1.,
+            b: 1.,
+            a: 1.,
+        }),
+    ));
+    world.spawn((
+        SpotLight::new_with_ambient(0.2, 0.00, 0.3, 0.5),
+        Transform::new_vec(NaVec3::new(0., 3., 0.)),
         Color(wgpu::Color {
             r: 1.,
             g: 1.,
@@ -221,19 +252,58 @@ fn startup(
         }),
     ));
 }
+marker_comps!(PlayerPositionText);
 
-#[system_fn(RuntimeUpdateSchedule)]
-fn fps_logger(update: Res<RuntimeUpdateScheduleData>, mut prev_full_sec: Local<u64>) {
+fn update_player_pos_text(
+    mut camera_pos: SystemQuery<&Transform, With<Camera>>,
+    mut text: SystemQuery<&mut DebugText, With<PlayerPositionText>>,
+    mut mouse_text: SystemQuery<&mut DebugText, With<MouseMotionText>>,
+    mouse_input: Res<MouseInput>,
+) {
+    let mut text = text.get_single_mut().unwrap();
+    let mut mouse_text = mouse_text.get_single_mut().unwrap();
+    let vector = camera_pos.get_single_mut().unwrap().translation.vector;
+
+    text.text = format!(
+        "player position: (x: {:.2}m, y: {:.2}m, z: {:.2}m)",
+        vector.x, vector.y, vector.z
+    );
+    mouse_text.text = format!("mouse motion x: {:.2}, y: {:.2}", mouse_input.get_mouse_motion().0, mouse_input.get_mouse_motion().1);
+}
+
+#[system_fn]
+fn fps_logger(
+    update: Res<RuntimeUpdateScheduleData>,
+    mut prev_full_sec: Local<u64>,
+    mut fps_text: SystemQuery<&mut DebugText, With<FpsText>>,
+) {
     if *prev_full_sec != update.since_start.as_secs_f64() as u64 {
         dbg!(1. / update.dt.as_secs_f64());
         *prev_full_sec = update.since_start.as_secs_f64() as u64;
         dbg!(*prev_full_sec);
     }
+    let mut text = fps_text.get_single_mut().unwrap();
+    text.text = format!("fps: {:.1}", 1. / update.dt.as_secs_f32());
 }
 
 //#[system_fn(RuntimeUpdateSchedules)]
 fn testing(_a: Res<Gravity>) {
     //
+}
+
+#[system_fn]
+fn sync_arrow(
+    mut camera: SystemQuery<(&Camera)>,
+    mut arrow: SystemQuery<&mut Transform, With<ArrowEntity>>,
+) {
+    if arrow.get_single().is_err() {
+        return;
+    }
+
+    let arrow = &mut arrow.single_mut().rotation;
+    let camera = camera.single();
+
+    *arrow = UnitQuaternion::from_matrix(&camera.rot_matrix);
 }
 
 pub async fn run() {
@@ -273,16 +343,13 @@ pub async fn run() {
                             let uuid = asset.uuid;
 
                             asset.loaded.store(false, Ordering::SeqCst);
-                                //dbg!("ran callback!!!!!!!!!!!!!!!!!!!!!!4");
 
                             let asset_mut = asset.get_mut().unwrap();
                             *asset_mut = res;
                             let handle = AssetHandleUntype::new(uuid, &mut dupe(runtime).asset_manager);
 
                             let callbacks = &asset.callbacks;
-                            //dbg!(callbacks);
                             for callback in callbacks {
-                                //dbg!("ran callback!!!!!!!!!!!!!!!!!!!!!!4!4!44! at thread");
                                 callback(handle.clone(), dupe(runtime));
                             }
                             asset.loaded.store(true, Ordering::SeqCst);
@@ -317,6 +384,9 @@ pub async fn run() {
     dupe(runtime)
         .buffer_manager
         .register_new_buffer_type::<InstanceBufferType>();
+    dupe(runtime)
+        .buffer_manager
+        .register_new_buffer_type::<StorageBufferType>();
 
     let render_states = runtime.get_resource_mut::<RenderManagerResource>();
     let render = TypedAddr::new_with_ref(render_states);
@@ -335,6 +405,9 @@ pub async fn run() {
     runtime.register_system::<RuntimeUpdateSchedule>(fps_logger.into_system());
     runtime.register_system::<RuntimeUpdateSchedule>(update_rendering.into_system());
     runtime.register_system::<RuntimeUpdateSchedule>(sync_light.into_system());
+    runtime.register_system::<RuntimeUpdateSchedule>(update_debug_text.into_system());
+    runtime.register_system::<RuntimeUpdateSchedule>(update_player_pos_text.into_system());
+    runtime.register_system::<RuntimeUpdateSchedule>(sync_arrow.into_system());
 
     runtime.register_system::<RuntimePostPhysicsSyncSchedule>(update_light_material.into_system());
     /*runtime
@@ -387,12 +460,42 @@ pub async fn run() {
         .get_resource_mut::<LightMaterialResource>()
         .shader_asset_handle = shader.as_untype();
 
+
+    let mut controller = Gilrs::new().unwrap();
+
+
     //let mut finished = false;
 
     //let mut cx = Context::from_waker(futures::task::noop_waker_ref());
+    let key_input = runtime.get_resource_mut::<KeyInput>();
+    let mouse_input = runtime.get_resource_mut::<MouseInput>();
     let mut should_run = true;
 
     loop {
+        key_input.reset_events();
+        mouse_input.reset_events();
+        //let a = controller.next_event_blocking(Some(Duration::from_secs(10)));
+        //dbg!(a.unwrap());
+        while let Some(x) = controller.next_event() {
+            match x.event {
+                gilrs::EventType::ButtonPressed(button, code) => {
+                    println!("controller pressed {:?} with code {:?}", button, code);
+                },
+                gilrs::EventType::ButtonRepeated(_, _) => (),
+                gilrs::EventType::ButtonReleased(_, _) => (),
+                gilrs::EventType::ButtonChanged(button, value, code) => {
+                    println!("button {:?} with code {:?} was changed to {}", button, code, value);
+                },
+                gilrs::EventType::AxisChanged(axis, value, code) => {
+                    println!("axis {:?} with code {:?} changed to value {}", axis, code, value);
+                },
+                gilrs::EventType::Connected => (),
+                gilrs::EventType::Disconnected => (),
+                gilrs::EventType::Dropped => (),
+            }
+            dbg!(x);
+            //println!("controller event: {:?} received from controller: {:?}, at time: {:?}", x.event, controller.gamepad(x.id).name(), x.time);
+        }
         let mut events = Vec::new();
         let mut scale_factor_changed: Option<PhysicalSize<u32>> = None;
         let frame_start = Instant::now();
@@ -427,25 +530,36 @@ pub async fn run() {
         for event in events {
             match event {
                 Event::DeviceEvent {
-                    event: DeviceEvent::MouseMotion{ delta, },
+                    event: DeviceEvent::MouseMotion { delta, },
                     .. // We're not using device_id currently
                 } => {
+                    mouse_input.mouse_motion = (delta.0 as f32, delta.1 as f32);
+                    let motion = runtime.ecs.world.query_filtered::<&mut DebugText, With<MouseMotionText>>().get_single_mut(&mut runtime.ecs.world);
                     render.get().camera_controller.deref_mut().process_mouse(delta.0, delta.1);
                 },
+                Event::DeviceEvent { event: DeviceEvent::Key(KeyboardInput { scancode: _, state, virtual_keycode, modifiers }), .. } => {
+                    key_input.register_input(virtual_keycode.unwrap(), state, modifiers);
+                    
+                },
+                Event::DeviceEvent { event: DeviceEvent::Button { button, state }, .. } => {
+                    //println!("button: {}, state: {:?}", button, state);
+                }
                 Event::WindowEvent {
                     ref event,
                     window_id,
                 } if window_id == window_ref.id() => {
-                    if !runtime.window_events(event) {
-                        match event {
-                            WindowEvent::CloseRequested | get_key_pressed!(VirtualKeyCode::Escape) => {
-                                should_run = false;
-                            }
-                            WindowEvent::Resized(size) => runtime.resize(*size),
-                            _ => {}
+                    runtime.window_events(event);
+                    match event {
+                        WindowEvent::CloseRequested | get_key_pressed!(VirtualKeyCode::Escape) => {
+                            should_run = false;
                         }
+                        WindowEvent::Resized(size) => runtime.resize(*size),
+                        WindowEvent::AxisMotion { device_id, axis, value } => {
+                            println!("axis motion event, device: {:?}, axis: {}, value: {}", device_id, axis, value);
+                        },
+                        _ => {}
                     }
-                },
+                }
                 _ => {}
             }
         }
@@ -455,6 +569,16 @@ pub async fn run() {
         while let Ok(req) = runtime.asset_manager.main_exec_rx.try_recv() {
             req();
         }
+        if key_input.is_pressed(VirtualKeyCode::Space) {
+            println!("pressed space");
+        }
+        if key_input.is_released(VirtualKeyCode::Space) {
+            println!("released space");
+        }
+        if key_input.is_held_down(VirtualKeyCode::Space) {
+            println!("space is held donw");
+        }
+        dbg!(mouse_input.get_mouse_motion());
         runtime.update(dt, start);
         last_render_time = frame_start;
         let since_start = frame_start - start;
@@ -463,26 +587,6 @@ pub async fn run() {
             prev_full_sec = since_start as u64;
         }
         let engine = dupe(runtime);
-        /*let light_material_pass = dupe(engine).engine_cache.cache("light_draw_pass", || {
-            let render = engine.get_resource_mut::<RenderManagerResource>();
-            let mut material = LightMaterial::from_engine(engine);
-
-            let mesh = TextureVertexTemplates::cube(&render.device);
-            material.set_mesh(mesh);
-            material.set_texture(texture.clone());
-            material.set_instance(render.light_instance_buffer.get().clone());
-
-            material.set_instance_value(vec![LightMaterialInstance::new(
-                Vec3::new(0., 0., 0.),
-                Quaternion::zero(),
-            )]);
-
-            DrawPass::new(
-                Box::new(material),
-                vec![shader_res.as_untype(), texture.as_untype()],
-            )
-        });*/
-        //render.get().draw_passes.push(light_material_pass);
 
         span!(trace_render, "rendering");
         match runtime.render() {
@@ -499,12 +603,12 @@ pub async fn run() {
 
         let current_frame_time = frame_start.elapsed().as_secs_f32();
 
+
         let diff = target_frame_time - current_frame_time;
 
-        if diff.is_positive() {
+        if diff.is_sign_positive() {
             spin_sleep::sleep(Duration::from_secs_f32(diff));
         }
-        //dbg!("ran frame");
 
         #[cfg(not(feature = "prod"))]
         tracing_tracy::client::frame_mark();
@@ -537,60 +641,6 @@ pub struct Float(OrderedFloat<f32>);
 impl From<f32> for Float {
     fn from(val: f32) -> Self {
         Float(OrderedFloat(val))
-    }
-}
-
-#[repr(C)]
-#[derive(PartialEq, Debug, Copy, Clone, Default)]
-pub struct Vec3 {
-    pub x: f32,
-    pub y: f32,
-    pub z: f32,
-}
-impl Vec3 {
-    pub fn new(x: f32, y: f32, z: f32) -> Self {
-        Vec3 { x, y, z }
-    }
-    pub fn as_vector3(&self) -> Vector3<f32> {
-        Vector3 {
-            x: self.x,
-            y: self.y,
-            z: self.z,
-        }
-    }
-}
-impl From<Vec3> for Vector3<f32> {
-    fn from(val: Vec3) -> Self {
-        val.as_vector3()
-    }
-}
-impl From<Vector3<f32>> for Vec3 {
-    fn from(value: Vector3<f32>) -> Self {
-        Self::new(value.x, value.y, value.z)
-    }
-}
-impl From<Point3<f32>> for Vec3 {
-    fn from(value: Point3<f32>) -> Self {
-        Self::new(value.x, value.y, value.z)
-    }
-}
-impl From<Transform> for Vec3 {
-    fn from(value: Transform) -> Self {
-        Self::new(
-            value.translation.x,
-            value.translation.y,
-            value.translation.z,
-        )
-    }
-}
-
-impl Eq for Vec3 {}
-
-impl Hash for Vec3 {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        OrderedFloat(self.x).hash(state);
-        OrderedFloat(self.y).hash(state);
-        OrderedFloat(self.z).hash(state);
     }
 }
 

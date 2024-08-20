@@ -67,7 +67,7 @@ macro_rules! implement_schedule {
                 self.register_dyn(Box::new(action) as Box<dyn ScheduleRunnable>);
             }
 
-            fn execute(&'static mut self, engine: &'static mut EngineRuntime) {
+            fn execute(&'static mut self, engine: &'static mut $crate::EngineRuntime) {
                 $crate::span!(trace_exec, stringify!($type));
 
                 if !engine.paralellism {
@@ -196,7 +196,7 @@ macro_rules! implement_schedule {
                     dep_graph: DepGraph::default(),
                 }
             }
-            pub fn calc_dep_graph(&'static mut self, engine: &mut EngineRuntime) {
+            pub fn calc_dep_graph(&'static mut self, engine: &mut $crate::EngineRuntime) {
                 let start = std::time::Instant::now();
                 self.dep_graph = calc_dep_graph(&mut self.actions, dupe(engine));
                 dbg!(start.elapsed());
@@ -317,7 +317,7 @@ macro_rules! drop_span {
 macro_rules! implement_schedule_main {
     ($type: ty, $data: ty) => {
         impl $crate::engine_runtime::schedule_manager::schedule::Schedule for $type {
-            fn execute(&'static mut self, engine: &'static mut EngineRuntime) {
+            fn execute(&'static mut self, engine: &'static mut $crate::EngineRuntime) {
                 $crate::span!(trace_exec, stringify!($type));
                 //dbg!(engine.paralellism);
                 single_thread_scheduler(engine, &mut self.actions);

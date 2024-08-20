@@ -1,16 +1,14 @@
 use krajc::EngineResource;
+use new::TextState;
 use wgpu::*;
 
-use crate::{
-    engine_runtime::schedule_manager::system_params::system_resource::EngineResource,
-    InstanceBufferType, Lateinit, UniformBufferType,
-};
+use crate::{InstanceBufferType, Lateinit, UniformBufferType};
 
 use super::{
-    buffer_manager::managed_buffer::ManagedBufferInstanceHandle,
-    builtin_materials::light_material::material::LightUniform,
+    buffer_manager::{managed_buffer::ManagedBufferInstanceHandle, StorageBufferType},
     camera::camera::{CameraController, CameraUniform, Projection},
     draw_pass::DrawPass,
+    lights::{PointLightUniform, SpotLightUniform},
     texture::texture::Texture,
 };
 
@@ -35,7 +33,6 @@ pub struct RenderManagerResource {
     pub config: Lateinit<SurfaceConfiguration>,
     pub size: Lateinit<winit::dpi::PhysicalSize<u32>>,
 
-    pub texture: Lateinit<Texture>,
     pub depth_texture: Lateinit<Texture>,
 
     pub window: Lateinit<winit::window::Window>,
@@ -49,12 +46,23 @@ pub struct RenderManagerResource {
     pub camera_uniform: Lateinit<CameraUniform>,
     pub camera_buffer: Lateinit<ManagedBufferInstanceHandle<UniformBufferType>>,
 
-    pub light_uniform: Lateinit<LightUniform>,
-    pub light_buffer: Lateinit<ManagedBufferInstanceHandle<UniformBufferType>>,
+    pub point_light_buffer: Lateinit<ManagedBufferInstanceHandle<StorageBufferType>>,
+    pub spot_light_buffer: Lateinit<ManagedBufferInstanceHandle<StorageBufferType>>,
+
+    pub point_light_uniform: Lateinit<Vec<PointLightUniform>>,
+    pub spot_light_uniform: Lateinit<Vec<SpotLightUniform>>,
+
+    pub point_light_count_buffer: Lateinit<ManagedBufferInstanceHandle<UniformBufferType>>,
+    pub spot_light_count_buffer: Lateinit<ManagedBufferInstanceHandle<UniformBufferType>>,
+
+    pub point_light_count_uniform: Lateinit<[u32; 4]>,
+    pub spot_light_count_uniform: Lateinit<[u32; 4]>,
 
     pub clear_color: Lateinit<Color>,
 
     pub draw_passes: Vec<&'static mut DrawPass>,
+
+    pub text_state: Lateinit<TextState>,
 }
 impl Clone for RenderManagerResource {
     fn clone(&self) -> Self {

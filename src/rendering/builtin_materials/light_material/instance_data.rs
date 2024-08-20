@@ -1,36 +1,53 @@
 use bevy_ecs::component::Component;
 use bytemuck::{Pod, Zeroable};
-use cgmath::{prelude::*, *};
+use rapier3d::na::Matrix4;
 
 use crate::*;
 
 #[derive(Clone, PartialEq, Debug, Component)]
 pub struct LightMaterialInstance {
-    pub position: Vec3,
-    pub rotation: Quaternion<f32>,
+    pub transform: Transform,
 }
 
 impl Default for LightMaterialInstance {
     fn default() -> Self {
         Self {
-            position: Vec3::new(0., 0., 0.),
-            rotation: <Quaternion<f32>>::zero(),
+            transform: Transform::default(),
         }
     }
 }
 impl LightMaterialInstance {
-    pub fn new(position: Vec3, rotation: Quaternion<f32>) -> Self {
-        Self { position, rotation }
-    }
-    pub fn from_pos(pos: Vec3) -> Self {
-        Self::new(pos, Quaternion::zero())
+    pub fn new(transform: Transform) -> Self {
+        Self { transform }
     }
     pub fn to_raw(&self) -> RawLightMaterialInstance {
-        let model =
-            Matrix4::from_translation(self.position.as_vector3()) * Matrix4::from(self.rotation);
+        let engine = unsafe { ENGINE_RUNTIME.get() };
+
+        //let translation_matrix = Translation3::from(self.transform.translation);
+        let mut model_matrix = Matrix4::identity();
+
+        let rot_matrix = self
+            .transform
+            .rotation
+            .to_rotation_matrix()
+            .to_homogeneous();
+
+        model_matrix.fixed_view_mut::<4, 4>(0, 0).copy_from(
+            &rot_matrix, /*
+                         &engine
+                             .ecs
+                             .world
+                             .query::<&Camera>()
+                             .single(&engine.ecs.world)
+                             .rot_matrix,*/
+        );
+
+        model_matrix[(0, 3)] = self.transform.translation.vector.x;
+        model_matrix[(1, 3)] = self.transform.translation.vector.y;
+        model_matrix[(2, 3)] = self.transform.translation.vector.z; //let isometry = Isometry3::from_parts(translation_matrix, self.transform.rotation);
 
         RawLightMaterialInstance {
-            model: std::convert::Into::into(model),
+            model: model_matrix.into(),
         }
     }
 }

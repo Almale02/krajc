@@ -2,8 +2,13 @@ use std::ops::Deref;
 use std::ops::DerefMut;
 
 use crate::engine_runtime::schedule_manager::system_params::system_query::SystemQuery;
-use crate::physics::components::general::LinearVelocity;
+use crate::marker_comps;
 use crate::rendering::camera::camera::Camera;
+use crate::rendering::lights::PointLight;
+use crate::rendering::lights::PointLightType;
+use crate::rendering::lights::SpotLight;
+use crate::rendering::lights::SpotLightType;
+use crate::rendering::text::DebugText;
 use crate::RenderManagerResource;
 use crate::RuntimeUpdateScheduleData;
 use crate::TextureMaterialMarker;
@@ -15,11 +20,15 @@ use bevy_ecs::query::With;
 use krajc::system_fn;
 //use krajc::system_fn;
 use rapier3d::na::Isometry3;
+use rapier3d::na::Translation3;
 use rapier3d::na::Vector3;
 
 use crate::Res;
 
-#[derive(Component, Clone, Default, PartialEq)]
+pub type Translation = Translation3<f32>;
+pub type Vector = Vector3<f32>;
+
+#[derive(Component, Clone, Default, PartialEq, Debug)]
 pub struct Transform {
     pub iso: Isometry3<f32>,
 }
@@ -47,23 +56,26 @@ impl DerefMut for Transform {
     }
 }
 
+marker_comps!(CameraRotText);
+
 #[system_fn(RuntimeUpdateSchedule)]
 pub fn update_rendering(
-    mut camera: SystemQuery<&mut Transform, With<Camera>>, // you can see that i am using bevy for querying,
-    mut render_state: Res<RenderManagerResource>,          // my own resource system
-    update: Res<RuntimeUpdateScheduleData>, // data related to the schedule like delta time
+    mut camera: SystemQuery<(&mut Transform, &mut Camera)>,
+    mut render_state: Res<RenderManagerResource>,
+    update: Res<RuntimeUpdateScheduleData>,
+    mut camera_rot_text: SystemQuery<&mut DebugText, With<CameraRotText>>,
 ) {
     let render_state = render_state.get_static_mut();
+    let (mut iso, mut camera) = camera.get_single_mut().unwrap();
 
-    let mut iso = match camera.get_single_mut() {
-        Ok(x) => x,
-        Err(e) => return,
-    };
-    //dbg!(&iso.iso);
+    let mut camera_rot_text = camera_rot_text.get_single_mut().unwrap();
 
-    render_state
-        .camera_controller
-        .update_camera(&mut iso, update.dt.as_secs_f64());
+    render_state.camera_controller.update_camera(
+        &mut iso,
+        update.dt.as_secs_f64(),
+        &mut camera,
+        &mut camera_rot_text.text,
+    );
     render_state
         .camera_uniform
         .update_view_proj(&mut iso, &render_state.projection);
@@ -84,51 +96,80 @@ pub fn move_stuff_up(
 
 #[derive(Component)]
 pub struct Light;
-#[derive(Component)]
+#[derive(Component, Clone, Default)]
 pub struct Color(pub wgpu::Color);
+
+impl Deref for Color {
+    type Target = wgpu::Color;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 #[system_fn]
 pub fn sync_light(
-    mut render_state: Res<RenderManagerResource>,
-    mut light: SystemQuery<(&Transform, &Color), With<Light>>,
+    render_state: Res<RenderManagerResource>,
+    mut point_light: SystemQuery<(&Transform, &Color, &PointLight)>,
+    mut spot_light: SystemQuery<(&Transform, &Color, &SpotLight)>,
 ) {
-    let (trans, color) = {
-        if light.get_single().is_err() {
-            return;
-        } else {
-            light.single()
-        }
-    };
+    let point_lights = point_light
+        .iter()
+        .map(|(trans, color, light)| {
+            PointLightType::new(
+                trans.translation,
+                color.0,
+                light.light_strenght,
+                light.ambient_strenght,
+            )
+            .to_raw()
+        })
+        .collect::<Vec<_>>();
+    let spot_lights = spot_light
+        .iter()
+        .map(|(trans, color, light)| {
+            SpotLightType::new(
+                trans.clone(),
+                color.0,
+                light.light_strenght,
+                light.ambient_strenght,
+                light.inner_angle,
+                light.outer_angle,
+            )
+            .to_raw()
+        })
+        .collect::<Vec<_>>();
 
-    let new_pos = cgmath::Vector3::new(
-        trans.translation.x,
-        trans.translation.y,
-        trans.translation.z,
-    );
-
-    render_state.light_uniform.position =
-        cgmath::Vector4::new(new_pos.x, new_pos.y, new_pos.z, 0.).into();
-    render_state.light_uniform.color = [color.0.r as f32, color.0.g as f32, color.0.b as f32, 0.];
-
+    // *EXTREMELY IMPORTANT!*
+    // you should *CAST* the usize from the vector lenght to *U32* because shader uses u32 and there is no way to use usize there
     render_state
-        .light_buffer
-        .set_data(*render_state.light_uniform);
+        .point_light_count_buffer
+        .set_data(point_lights.len() as u32);
+    render_state
+        .spot_light_count_buffer
+        .set_data(spot_lights.len() as u32);
+
+    render_state.point_light_buffer.set_data_vec(point_lights);
+    render_state.spot_light_buffer.set_data_vec(spot_lights);
 }
 #[system_fn]
 pub fn make_light_follow_camera(
     mut camera: SystemQuery<&Transform, With<Camera>>,
-    mut light: SystemQuery<(&mut Transform, &mut LinearVelocity), With<Light>>,
+    mut light: SystemQuery<&mut Transform, With<SpotLight>>,
 ) {
+    if camera.get_single().is_err() {
+        return;
+    }
     let camera = camera.single().iso;
-    let (mut light, mut lin_vel) = match light.get_single_mut() {
+    let mut light = match light.get_single_mut() {
         Ok(x) => x,
         Err(_) => return,
     };
-    //dbg!(light.translation);
-    //dbg!(camera.translation);
 
     let light = &mut light.iso;
 
     light.translation.x = camera.translation.x;
+    light.translation.y = camera.translation.y;
     light.translation.z = camera.translation.z;
+    light.rotation = camera.rotation;
 }

@@ -56,8 +56,8 @@ impl<T: ManagedBufferGeneric + 'static> ManagedBufferInstanceHandle<T> {
 
         instance
     }
-    pub fn new_with_init<A: NoUninit>(id: String, data: A) -> Self {
-        let instance = Self::new(id);
+    pub fn new_with_init<A: NoUninit>(id: &str, data: A) -> Self {
+        let instance = Self::new(id.to_owned());
         let engine = unsafe { ENGINE_RUNTIME.get() };
         engine
             .buffer_manager

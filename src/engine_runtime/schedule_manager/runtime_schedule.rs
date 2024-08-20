@@ -13,10 +13,7 @@ use std::{
     vec::Vec,
 };
 
-use super::{
-    super::EngineRuntime, schedule::ScheduleRunnable,
-    system_params::system_resource::EngineResource,
-};
+use super::schedule::ScheduleRunnable;
 use crate::{implement_schedule, struct_with_default, typed_addr::TypedAddr};
 
 pub type DepGraph = (

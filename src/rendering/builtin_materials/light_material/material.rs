@@ -1,4 +1,4 @@
-use std::{collections::HashMap, ops::Range, time::Instant};
+use std::{collections::HashMap, ops::Range};
 
 use bevy_ecs::{entity::Entity, query::With};
 use krajc::{system_fn, EngineResource, FromEngine};
@@ -47,13 +47,16 @@ pub struct LightMaterial {
     instance_buffer: Lateinit<ManagedBufferInstanceHandle<InstanceBufferType>>,
     camera_layout: Lateinit<&'static wgpu::BindGroupLayout>,
     camera_bind_group: Lateinit<wgpu::BindGroup>,
-    light_layout: Lateinit<&'static wgpu::BindGroupLayout>,
-    light_bind_group: Lateinit<wgpu::BindGroup>,
+    point_light_layout: Lateinit<&'static wgpu::BindGroupLayout>,
+    point_light_bind_group: Lateinit<wgpu::BindGroup>,
+    spot_light_layout: Lateinit<&'static wgpu::BindGroupLayout>,
+    spot_light_bind_group: Lateinit<wgpu::BindGroup>,
 }
 
 #[derive(EngineResource)]
 pub struct LightMaterialResource {
-    pub light_layout: BindGroupLayout,
+    pub point_light_layout: BindGroupLayout,
+    pub spot_light_layout: BindGroupLayout,
     pub camera_layout: BindGroupLayout,
     pub pipeline: Lateinit<RenderPipeline>,
     pub shader_asset_handle: AssetHandleUntype,
@@ -81,21 +84,62 @@ impl FromEngine for LightMaterialResource {
                         label: Some("camera_bind_group_layout"),
                     })
             },
-            light_layout: {
+            point_light_layout: {
                 render
                     .device
                     .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                        entries: &[wgpu::BindGroupLayoutEntry {
-                            binding: 0,
-                            visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Uniform,
-                                has_dynamic_offset: false,
-                                min_binding_size: None,
+                        entries: &[
+                            wgpu::BindGroupLayoutEntry {
+                                binding: 0,
+                                visibility: wgpu::ShaderStages::FRAGMENT,
+                                ty: wgpu::BindingType::Buffer {
+                                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                                    has_dynamic_offset: false,
+                                    min_binding_size: None,
+                                },
+                                count: None,
                             },
-                            count: None,
-                        }],
-                        label: Some("light_bind_group_layout"),
+                            wgpu::BindGroupLayoutEntry {
+                                binding: 1,
+                                visibility: wgpu::ShaderStages::FRAGMENT,
+                                ty: wgpu::BindingType::Buffer {
+                                    ty: wgpu::BufferBindingType::Uniform,
+                                    has_dynamic_offset: false,
+                                    min_binding_size: None,
+                                },
+                                count: None,
+                            },
+                        ],
+                        label: Some("point_light_bind_group_layout"),
+                    })
+            },
+            spot_light_layout: {
+                render
+                    .device
+                    .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                        entries: &[
+                            wgpu::BindGroupLayoutEntry {
+                                binding: 0,
+                                visibility: wgpu::ShaderStages::FRAGMENT,
+                                ty: wgpu::BindingType::Buffer {
+                                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                                    has_dynamic_offset: false,
+                                    min_binding_size: None,
+                                },
+                                count: None,
+                            },
+                            wgpu::BindGroupLayoutEntry {
+                                binding: 1,
+                                visibility: wgpu::ShaderStages::FRAGMENT,
+                                ty: wgpu::BindingType::Buffer {
+                                    ty: wgpu::BufferBindingType::Uniform,
+                                    has_dynamic_offset: false,
+                                    min_binding_size: None,
+                                },
+                                count: None,
+                            },
+                        ],
+                        label: Some("spot_light_bind_group_layout"),
                     })
             },
             pipeline: Default::default(),
@@ -123,8 +167,6 @@ impl LightMaterial {
     }
     pub fn set_instance_value_ref(&mut self, data: Vec<&LightMaterialInstance>) {
         self.instance_count = data.len() as u32;
-        let iter_start = Instant::now();
-
         let iter_part = data.iter();
 
         let map_part = iter_part.map(|arg| arg.to_raw());
@@ -147,11 +189,12 @@ impl LightMaterial {
             render
                 .device
                 .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                    label: Some("Render Pipeline Layout"),
+                    label: Some("Light Render Pipeline Layout"),
                     bind_group_layouts: &[
                         &Texture::get_texture_bind_layout(&render.device),
                         &material_res.camera_layout,
-                        &material_res.light_layout,
+                        &material_res.point_light_layout,
+                        &material_res.spot_light_layout,
                     ],
                     push_constant_ranges: &[],
                 });
@@ -162,7 +205,7 @@ impl LightMaterial {
                 render
                     .device
                     .create_render_pipeline(&RenderPipelineDescriptor {
-                        label: Some("Render Pipeline"),
+                        label: Some("Light Render Pipeline"),
                         layout: Some(&render_pipeline_layout),
                         vertex: wgpu::VertexState {
                             module: shader,
@@ -219,7 +262,7 @@ pub fn update_light_material(
             &AssetHandle<Texture>,
             &AssetHandle<Mesh<TextureVertex>>,
         ),
-        (With<LightMaterialMarker>),
+        With<LightMaterialMarker>,
     >,
     mut render: Res<RenderManagerResource>,
     mut local_passes: Local<Vec<DrawPass>>,
@@ -230,35 +273,15 @@ pub fn update_light_material(
         (&AssetHandle<Texture>, &AssetHandle<Mesh<TextureVertex>>),
         Vec<LightMaterialInstance>,
     > = HashMap::new();
-
     query
         .iter()
         .for_each(|(_entity, trans, texture_handle, mesh_handle)| {
             let hash = (texture_handle, mesh_handle);
 
             match instance_datas.get_mut(&hash) {
-                Some(x) => x.push(LightMaterialInstance::new(
-                    trans.clone().into(),
-                    cgmath::Quaternion::new(
-                        trans.rotation.w,
-                        trans.rotation.i,
-                        trans.rotation.j,
-                        trans.rotation.k,
-                    ),
-                )),
+                Some(x) => x.push(LightMaterialInstance::new(trans.clone())),
                 None => {
-                    instance_datas.insert(
-                        hash,
-                        vec![LightMaterialInstance::new(
-                            trans.clone().into(),
-                            cgmath::Quaternion::new(
-                                trans.rotation.w,
-                                trans.rotation.i,
-                                trans.rotation.j,
-                                trans.rotation.k,
-                            ),
-                        )],
-                    );
+                    instance_datas.insert(hash, vec![LightMaterialInstance::new(trans.clone())]);
                 }
             }
         });
@@ -316,30 +339,59 @@ impl MaterialGeneric for LightMaterial {
         let light_res = engine.get_resource::<LightMaterialResource>();
 
         self.camera_layout.set(&light_res.camera_layout);
-        self.light_layout.set(&light_res.light_layout);
+        self.point_light_layout.set(&light_res.point_light_layout);
+        self.spot_light_layout.set(&light_res.spot_light_layout);
 
         self.camera_bind_group
             .set(render.device.create_bind_group(&wgpu::BindGroupDescriptor {
                 layout: &self.camera_layout,
                 entries: &[wgpu::BindGroupEntry {
                     binding: 0,
-                    //resource: camera_buffer.get_buffer().as_entire_binding(),
                     resource: render.camera_buffer.get_buffer().as_entire_binding(),
                 }],
                 label: Some("camera_bind_group"),
             }));
-        self.light_bind_group
-            .set(render.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                layout: &self.light_layout,
-                entries: &[wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: render.light_buffer.get_buffer().as_entire_binding(),
-                }],
-                label: Some("light_bind_group"),
-            }));
+        self.point_light_bind_group.set(
+            render.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                layout: &self.point_light_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: render.point_light_buffer.get_buffer().as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: render
+                            .point_light_count_buffer
+                            .get_buffer()
+                            .as_entire_binding(),
+                    },
+                ],
+                label: Some("point_light_bind_group"),
+            }),
+        );
+        self.spot_light_bind_group.set(
+            render.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                layout: &self.spot_light_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: render.spot_light_buffer.get_buffer().as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: render
+                            .spot_light_count_buffer
+                            .get_buffer()
+                            .as_entire_binding(),
+                    },
+                ],
+                label: Some("spot_light_bind_group"),
+            }),
+        );
     }
-    fn set_bind_groups<'a>(&'a self, pipeline: &mut RenderPass<'a>, engine: &mut EngineRuntime) {
-        let state = engine.get_resource_mut::<RenderManagerResource>();
+    fn set_bind_groups<'a>(&'a self, pipeline: &mut RenderPass<'a>, _engine: &mut EngineRuntime) {
+        //let state = engine.get_resource_mut::<RenderManagerResource>();
 
         let texture = self
             .texture
@@ -350,7 +402,8 @@ impl MaterialGeneric for LightMaterial {
         you could call Texture::get_texture_bind_group on the created texture, and then set the return as the bind group field"), &[]);
 
         pipeline.set_bind_group(1, &self.camera_bind_group, &[]);
-        pipeline.set_bind_group(2, &self.light_bind_group, &[]);
+        pipeline.set_bind_group(2, &self.point_light_bind_group, &[]);
+        pipeline.set_bind_group(3, &self.spot_light_bind_group, &[]);
     }
     fn get_index_range(&self) -> Range<u32> {
         0..self.mesh.get().unwrap().index_list.len() as u32
@@ -366,23 +419,5 @@ impl MaterialGeneric for LightMaterial {
         let a = engine.get_resource::<LightMaterialResource>();
 
         a.shader_asset_handle.clone()
-    }
-}
-
-#[repr(C)]
-#[derive(Default, Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct LightUniform {
-    pub position: [f32; 4],
-    pub color: [f32; 4],
-    pub rot_unit: [f32; 4],
-}
-
-impl LightUniform {
-    pub fn new(position: [f32; 3], color: [f32; 3], rot: [f32; 3]) -> Self {
-        Self {
-            position: [position[0], position[1], position[2], 0.],
-            color: [color[0], color[1], color[2], 0.],
-            rot_unit: [rot[0], rot[1], rot[2], 0.],
-        }
     }
 }

@@ -23,6 +23,25 @@ impl ManagedBufferGeneric for UniformBufferType {
         &mut self.instance_handles
     }
 }
+
+#[derive(Default)]
+pub struct StorageBufferType {
+    instance_handles: HashMap<String, (&'static [u8], Buffer)>,
+}
+impl ManagedBufferGeneric for StorageBufferType {
+    fn buffer_usages() -> wgpu::BufferUsages {
+        BufferUsages::STORAGE | BufferUsages::COPY_DST
+    }
+    fn label() -> String {
+        String::from("uniform buffer")
+    }
+    fn instance_handles(
+        &mut self,
+    ) -> &mut std::collections::HashMap<String, (&'static [u8], Buffer)> {
+        &mut self.instance_handles
+    }
+}
+
 #[derive(Default)]
 pub struct InstanceBufferType {
     instance_handles: HashMap<String, (&'static [u8], Buffer)>,
