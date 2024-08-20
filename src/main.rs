@@ -68,9 +68,9 @@ use rendering::{
         managed_buffer::ManagedBufferGeneric, InstanceBufferType, StorageBufferType,
         UniformBufferType,
     },
-    builtin_materials::light_material::material::{
-        update_light_material, LightMaterial, LightMaterialResource,
-    },
+    builtin_materials::{light_material::material::{
+        update_light_material, LightMaterialResource,
+    }, texture_material::material::TextureMaterial},
     camera::camera::Camera,
     lights::{LightLookDirText, PointLight, SpotLight},
     managers::RenderManagerResource,
@@ -180,7 +180,8 @@ fn startup(
     world.spawn((
         //ArrowEntity,
         Transform::new_vec(Vector::new(0., 6., 0.)),
-        LightMaterialMarker,
+        //LightMaterialMarker,
+        TextureMaterialMarker,
         monkey.clone(),
         dirt.clone(),
     ));
@@ -205,7 +206,8 @@ fn startup(
             let y = y - 64;
             world.spawn((
                 Transform::new_vec(Vector::new(x as f32, -6., y as f32)),
-                LightMaterialMarker,
+                //LightMaterialMarker,
+                TextureMaterialMarker,
                 stone.clone(),
                 mesh.clone(),
                 RigidBody::new(RigidBodyType::Fixed)
@@ -293,7 +295,7 @@ fn testing(_a: Res<Gravity>) {
 
 #[system_fn]
 fn sync_arrow(
-    mut camera: SystemQuery<(&Camera)>,
+    mut camera: SystemQuery<&Camera>,
     mut arrow: SystemQuery<&mut Transform, With<ArrowEntity>>,
 ) {
     if arrow.get_single().is_err() {
@@ -364,7 +366,7 @@ pub async fn run() {
         });
     });
 
-    let shader = runtime.asset_manager.load_resource(
+    let shader_light = runtime.asset_manager.load_resource(
         FileResourceLoader::<ShaderLoader>::new(
             "resources/shaders/shader_light.wgsl",
             ShaderLoader::default(),
@@ -373,7 +375,19 @@ pub async fn run() {
             let shader = x.get_typed::<ShaderModule>();
             unsafe { dbg!(shader.get_unchecked()) };
             let shader = unsafe { shader.get_unchecked() };
-            LightMaterial::set_render_pipeline(runtime, shader.unwrap(), x);
+            //LightMaterial::set_render_pipeline(runtime, shader.unwrap(), x);
+        }],
+    );
+    let shader_texture = runtime.asset_manager.load_resource(
+        FileResourceLoader::<ShaderLoader>::new(
+            "resources/shaders/shader_texture.wgsl",
+            ShaderLoader::default(),
+        ),
+        vec![|x, runtime| {
+            let shader = x.get_typed::<ShaderModule>();
+            unsafe { dbg!(shader.get_unchecked()) };
+            let shader = unsafe { shader.get_unchecked() };
+            TextureMaterial::set_render_pipeline(runtime, shader.unwrap(), x);
         }],
     );
 
@@ -458,7 +472,7 @@ pub async fn run() {
 
     runtime
         .get_resource_mut::<LightMaterialResource>()
-        .shader_asset_handle = shader.as_untype();
+        .shader_asset_handle = shader_light.as_untype();
 
 
     let mut controller = Gilrs::new().unwrap();

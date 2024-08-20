@@ -92,7 +92,8 @@ impl EngineRuntime {
             .expect("failed");
 
         drop(instance);
-        let first_limits = Limits::default();
+        let mut first_limits = Limits::default();
+
         let second_limits = Limits::downlevel_webgl2_defaults();
 
         let features = Features::POLYGON_MODE_LINE
@@ -116,7 +117,6 @@ impl EngineRuntime {
                     .request_device(
                         &wgpu::DeviceDescriptor {
                             features: Features::default(),
-
                             limits: second_limits,
 
                             label: None,
