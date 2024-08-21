@@ -1,7 +1,9 @@
 use glyphon::{Resolution, TextArea, TextBounds};
 use wgpu::*;
 
-use crate::{drop_span, engine_runtime::EngineRuntime, span, typed_addr::dupe};
+use crate::{engine_runtime::EngineRuntime, typed_addr::dupe};
+//use crate::span;
+//use crate::drop_span;
 
 use super::RenderManagerResource;
 
@@ -37,9 +39,9 @@ impl EngineRuntime {
             )
             .unwrap();
 
-        span!(trace_get_surface_texture, "get surface texture");
+        //span!(trace_get_surface_texture, "get surface texture");
         let output = state.surface.get_current_texture()?;
-        drop_span!(trace_get_surface_texture);
+        //drop_span!(trace_get_surface_texture);
 
         let view = output
             .texture
@@ -51,7 +53,7 @@ impl EngineRuntime {
                 label: Some("Render encoder"),
             });
 
-        span!(trace_render_pass, "render pass"); // before this most of the time
+        //span!(trace_render_pass, "render pass"); // before this most of the time
         let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
             label: Some("Render Pass"),
             color_attachments: &[Some(RenderPassColorAttachment {
@@ -81,7 +83,7 @@ impl EngineRuntime {
         }
 
         drop(render_pass);
-        span!(trace_render_pass, "render pass"); // before this most of the time
+        //span!(trace_render_pass, "render pass"); // before this most of the time
         let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
             label: Some("Render Pass"),
             color_attachments: &[Some(RenderPassColorAttachment {
@@ -105,18 +107,18 @@ impl EngineRuntime {
         drop(render_pass);
 
         state.draw_passes.clear();
-        span!(trace_light_material, "light_material");
+        //span!(trace_light_material, "light_material");
 
-        drop_span!(trace_render_pass);
+        //drop_span!(trace_render_pass);
         //drop(render_pass);
 
-        span!(trace_queue, "queue submit");
+        //span!(trace_queue, "queue submit");
         state.queue.submit(vec![encoder.finish()]);
-        drop_span!(trace_queue);
+        //drop_span!(trace_queue);
 
-        span!(trace_present, "present");
+        //span!(trace_present, "present");
         output.present();
-        drop_span!(trace_present);
+        //drop_span!(trace_present);
 
         state.text_state.atlas.trim();
 

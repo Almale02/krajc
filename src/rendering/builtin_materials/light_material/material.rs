@@ -9,12 +9,13 @@ use wgpu::{
 };
 
 use crate::{
+    drop_span,
     engine_runtime::schedule_manager::system_params::system_local::Local,
     rendering::{
         asset::{AssetHandle, AssetHandleUntype},
         draw_pass::DrawPass,
     },
-    ENGINE_RUNTIME,
+    span, ENGINE_RUNTIME,
 };
 #[allow(unused_imports)]
 use crate::{
@@ -273,9 +274,11 @@ pub fn update_light_material(
         (&AssetHandle<Texture>, &AssetHandle<Mesh<TextureVertex>>),
         Vec<LightMaterialInstance>,
     > = HashMap::new();
+    span!(trace_createing_instances, "creating instances");
     query
         .iter()
         .for_each(|(_entity, trans, texture_handle, mesh_handle)| {
+            span!(trace_inside, "inside foreach loop");
             let hash = (texture_handle, mesh_handle);
 
             match instance_datas.get_mut(&hash) {
@@ -285,6 +288,7 @@ pub fn update_light_material(
                 }
             }
         });
+    drop_span!(trace_createing_instances);
 
     instance_datas
         .iter()

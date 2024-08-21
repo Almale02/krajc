@@ -57,8 +57,12 @@ codeget-units = 1
 
 [profile.dev]
 debug = true
-strip = false
+opt-level = 3
+codeget-units = 1
 
+debug-assertions = false
+overflow-checks = false
 
 [profile.dev.package.rapier3d]
 opt-level = 3
+codeget-units = 1
