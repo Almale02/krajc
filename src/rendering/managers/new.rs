@@ -98,8 +98,8 @@ impl EngineRuntime {
 
         let features = Features::POLYGON_MODE_LINE
             | Features::POLYGON_MODE_POINT
-            | Features::BUFFER_BINDING_ARRAY
-            | Features::STORAGE_RESOURCE_BINDING_ARRAY;
+            | Features::BUFFER_BINDING_ARRAY;
+        //| Features::STORAGE_RESOURCE_BINDING_ARRAY;
         let (device, queue) = {
             match adapter
                 .request_device(

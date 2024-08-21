@@ -3,6 +3,8 @@ use std::collections::{HashMap, HashSet};
 use krajc::EngineResource;
 use winit::event::{ButtonId, ElementState, ModifiersState, VirtualKeyCode};
 
+use crate::typed_addr::dupe;
+
 #[derive(EngineResource, Debug)]
 pub struct KeyboardInput {
     pub key_events: HashSet<(VirtualKeyCode, ElementState, ModifiersState)>,
@@ -263,6 +265,12 @@ impl MouseInput {
             prev_button_states: HashMap::default(),
             mouse_motion: Default::default(),
         };
+
+        input.button_states.insert(0, ElementState::Released);
+        input.button_states.insert(1, ElementState::Released);
+        input.button_states.insert(2, ElementState::Released);
+        input.button_states.insert(3, ElementState::Released);
+
         //input.fill_up_states();
         input.prev_button_states = input.button_states.clone();
         input
@@ -296,7 +304,7 @@ impl MouseInput {
     pub fn register_input(&mut self, button: ButtonId, state: ElementState) {
         self.button_events.insert((button, state));
 
-        *self.button_states.get_mut(&button).unwrap() = state;
+        *dupe(self).button_states.get_mut(&button).unwrap() = state;
     }
 }
 

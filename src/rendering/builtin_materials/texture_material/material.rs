@@ -187,7 +187,7 @@ impl TextureMaterial {
     }
 }
 
-#[system_fn(RuntimePostPhysicsSyncSchedule)]
+#[system_fn]
 pub fn update_texture_material(
     mut query: SystemQuery<
         (

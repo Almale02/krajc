@@ -167,6 +167,8 @@ impl SpotLightType {
             .get_single(&engine.ecs.world)
             .unwrap();
 
+        let forward = (self.transform.rotation * Vector::z()).normalize().into();
+
         SpotLightUniform::new(
             self.transform.translation.into(),
             {
@@ -177,7 +179,8 @@ impl SpotLightType {
                     self.color.a as f32,
                 ]
             },
-            ((camera.rot_matrix * -Vector::z()).normalize() * -1.).into(),
+            forward,
+            //((camera.rot_matrix * -Vector::z()).normalize() * -1.).into(),
             self.light_strenght,
             self.ambient_strenght,
             self.inner_angle,

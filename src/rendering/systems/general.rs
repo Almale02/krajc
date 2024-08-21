@@ -1,6 +1,9 @@
 use std::ops::Deref;
 use std::ops::DerefMut;
 
+use crate::engine_runtime::input::KeyboardInput;
+use crate::engine_runtime::input::MouseInput;
+use crate::engine_runtime::schedule_manager::system_params::system_local::Local;
 use crate::engine_runtime::schedule_manager::system_params::system_query::SystemQuery;
 use crate::marker_comps;
 use crate::rendering::camera::camera::Camera;
@@ -22,6 +25,7 @@ use krajc::system_fn;
 use rapier3d::na::Isometry3;
 use rapier3d::na::Translation3;
 use rapier3d::na::Vector3;
+use winit::event::VirtualKeyCode;
 
 use crate::Res;
 
@@ -64,7 +68,12 @@ pub fn update_rendering(
     mut render_state: Res<RenderManagerResource>,
     update: Res<RuntimeUpdateScheduleData>,
     mut camera_rot_text: SystemQuery<&mut DebugText, With<CameraRotText>>,
+    mouse: Res<MouseInput>,
 ) {
+    let motion = mouse.get_mouse_motion();
+    render_state
+        .camera_controller
+        .process_mouse(motion.0 as f64, motion.1 as f64);
     let render_state = render_state.get_static_mut();
     let (mut iso, mut camera) = camera.get_single_mut().unwrap();
 
@@ -154,13 +163,22 @@ pub fn sync_light(
 }
 #[system_fn]
 pub fn make_light_follow_camera(
-    mut camera: SystemQuery<&Transform, With<Camera>>,
+    mut camera: SystemQuery<(&Transform, &Camera)>,
     mut light: SystemQuery<&mut Transform, With<SpotLight>>,
+    keyboard: Res<KeyboardInput>,
+    mut should_sync: Local<bool>,
 ) {
+    if keyboard.is_pressed(VirtualKeyCode::F) {
+        *should_sync = !*should_sync;
+    }
+    if !*should_sync {
+        return;
+    }
+
     if camera.get_single().is_err() {
         return;
     }
-    let camera = camera.single().iso;
+    let (transform, camera) = camera.single();
     let mut light = match light.get_single_mut() {
         Ok(x) => x,
         Err(_) => return,
@@ -168,8 +186,8 @@ pub fn make_light_follow_camera(
 
     let light = &mut light.iso;
 
-    light.translation.x = camera.translation.x;
-    light.translation.y = camera.translation.y;
-    light.translation.z = camera.translation.z;
-    light.rotation = camera.rotation;
+    light.translation.x = transform.iso.translation.x;
+    light.translation.y = transform.iso.translation.y;
+    light.translation.z = transform.iso.translation.z;
+    light.rotation = camera.quat;
 }

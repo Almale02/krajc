@@ -6,7 +6,7 @@
 #![deny(unused_imports)]
 #![allow(clippy::type_complexity)]
 
-use crate::rendering::systems::general::update_rendering;
+use crate::rendering::{builtin_materials::texture_material::material::update_texture_material, systems::general::update_rendering};
 
 use bevy_ecs::query::With;
 use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
@@ -69,8 +69,8 @@ use rendering::{
         UniformBufferType,
     },
     builtin_materials::{light_material::material::{
-        update_light_material, LightMaterialResource,
-    }, texture_material::material::TextureMaterial},
+        update_light_material, LightMaterial, LightMaterialResource
+    }, texture_material::material::{TextureMaterial, TextureMaterialResource}},
     camera::camera::Camera,
     lights::{LightLookDirText, PointLight, SpotLight},
     managers::RenderManagerResource,
@@ -180,8 +180,8 @@ fn startup(
     world.spawn((
         //ArrowEntity,
         Transform::new_vec(Vector::new(0., 6., 0.)),
-        //LightMaterialMarker,
-        TextureMaterialMarker,
+        LightMaterialMarker,
+        //TextureMaterialMarker,
         monkey.clone(),
         dirt.clone(),
     ));
@@ -206,8 +206,8 @@ fn startup(
             let y = y - 64;
             world.spawn((
                 Transform::new_vec(Vector::new(x as f32, -6., y as f32)),
-                //LightMaterialMarker,
-                TextureMaterialMarker,
+                LightMaterialMarker,
+                //TextureMaterialMarker,
                 stone.clone(),
                 mesh.clone(),
                 RigidBody::new(RigidBodyType::Fixed)
@@ -375,7 +375,7 @@ pub async fn run() {
             let shader = x.get_typed::<ShaderModule>();
             unsafe { dbg!(shader.get_unchecked()) };
             let shader = unsafe { shader.get_unchecked() };
-            //LightMaterial::set_render_pipeline(runtime, shader.unwrap(), x);
+            LightMaterial::set_render_pipeline(runtime, shader.unwrap(), x);
         }],
     );
     let shader_texture = runtime.asset_manager.load_resource(
@@ -424,6 +424,7 @@ pub async fn run() {
     runtime.register_system::<RuntimeUpdateSchedule>(sync_arrow.into_system());
 
     runtime.register_system::<RuntimePostPhysicsSyncSchedule>(update_light_material.into_system());
+    runtime.register_system::<RuntimePostPhysicsSyncSchedule>(update_texture_material.into_system());
     /*runtime
     .register_system::<RuntimePostPhysicsSyncSchedule>(update_texture_material.into_system());*/
 
@@ -473,6 +474,9 @@ pub async fn run() {
     runtime
         .get_resource_mut::<LightMaterialResource>()
         .shader_asset_handle = shader_light.as_untype();
+    runtime
+        .get_resource_mut::<TextureMaterialResource>()
+        .shader_asset_handle = shader_texture.as_untype();
 
 
     let mut controller = Gilrs::new().unwrap();
@@ -548,15 +552,14 @@ pub async fn run() {
                     .. // We're not using device_id currently
                 } => {
                     mouse_input.mouse_motion = (delta.0 as f32, delta.1 as f32);
-                    let motion = runtime.ecs.world.query_filtered::<&mut DebugText, With<MouseMotionText>>().get_single_mut(&mut runtime.ecs.world);
-                    render.get().camera_controller.deref_mut().process_mouse(delta.0, delta.1);
                 },
                 Event::DeviceEvent { event: DeviceEvent::Key(KeyboardInput { scancode: _, state, virtual_keycode, modifiers }), .. } => {
                     key_input.register_input(virtual_keycode.unwrap(), state, modifiers);
                     
                 },
                 Event::DeviceEvent { event: DeviceEvent::Button { button, state }, .. } => {
-                    //println!("button: {}, state: {:?}", button, state);
+                    dbg!("yayayaaaaaaaaaaaaaaa");
+                    mouse_input.register_input(button, state);
                 }
                 Event::WindowEvent {
                     ref event,
@@ -583,16 +586,15 @@ pub async fn run() {
         while let Ok(req) = runtime.asset_manager.main_exec_rx.try_recv() {
             req();
         }
-        if key_input.is_pressed(VirtualKeyCode::Space) {
-            println!("pressed space");
+        if mouse_input.is_pressed(1) {
+            println!("left clicked");
         }
-        if key_input.is_released(VirtualKeyCode::Space) {
-            println!("released space");
+        if mouse_input.is_released(1) {
+            println!("released left click");
         }
-        if key_input.is_held_down(VirtualKeyCode::Space) {
-            println!("space is held donw");
+        if mouse_input.is_held_down(1) {
+            println!("holding down left click");
         }
-        dbg!(mouse_input.get_mouse_motion());
         runtime.update(dt, start);
         last_render_time = frame_start;
         let since_start = frame_start - start;
