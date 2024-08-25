@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use krajc::EngineResource;
+use krajc_macros::EngineResource;
 use winit::event::{ButtonId, ElementState, ModifiersState, VirtualKeyCode};
 
 use crate::typed_addr::dupe;

@@ -1,4 +1,4 @@
-use krajc::EngineResource;
+use krajc_macros::EngineResource;
 use new::TextState;
 use wgpu::*;
 
@@ -21,7 +21,7 @@ pub mod window;
 
 type S = &'static str;
 
-#[derive(Default, krajc::EngineResource)]
+#[derive(Default, EngineResource)]
 pub struct TargetFps(pub f32);
 
 #[derive(Default, EngineResource)]

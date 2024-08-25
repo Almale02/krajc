@@ -1,4 +1,4 @@
-use krajc::EngineResource;
+use krajc_macros::EngineResource;
 use rapier3d::{math::Real, na::Vector3};
 
 pub mod components;

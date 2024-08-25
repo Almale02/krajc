@@ -1,5 +1,5 @@
 use bevy_ecs::{entity::Entity, query::Added};
-use krajc::system_fn;
+use krajc_macros::system_fn;
 use rapier3d::{dynamics::RigidBodySet, geometry::ColliderSet};
 
 use crate::{
@@ -42,5 +42,5 @@ pub fn handle_collider_insert(
 }
 
 pub fn collider_systems(runtime: &mut EngineRuntime) {
-    runtime.register_system::<RuntimePhysicsSyncMainSchedule>(handle_collider_insert.into_system());
+    runtime.register_system::<RuntimePhysicsSyncMainSchedule>(handle_collider_insert.system());
 }

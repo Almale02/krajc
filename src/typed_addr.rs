@@ -1,12 +1,15 @@
 use std::marker::PhantomData;
 
+use stabby::stabby;
+
 #[macro_export]
 macro_rules! addr_ptr_to_ref_mut {
     ($ptr: expr, $ty: ty, $msg: expr) => {
         unsafe {
             if ($ptr as *mut $ty).is_null() {
                 panic!(
-                    "tried to convert a null mem addr to ref mut at the macro, msg was: {}",
+                    "tried to convert a null mem addr to ref mut at the macro, addr was: {}, msg was: {}",
+                    $ptr,
                     $msg
                 )
             }
@@ -24,9 +27,18 @@ macro_rules! addr_ptr_to_ptr {
     };
 }
 
+#[stabby]
 pub struct TypedAddr<T> {
     pub addr: usize,
     _p: PhantomData<T>,
+}
+impl<T> Clone for TypedAddr<T> {
+    fn clone(&self) -> Self {
+        Self {
+            addr: self.addr,
+            _p: PhantomData,
+        }
+    }
 }
 impl<T> TypedAddr<T> {
     pub const fn new(addr: usize) -> TypedAddr<T> {
@@ -46,7 +58,7 @@ impl<T> TypedAddr<T> {
         addr_ptr_to_ref_mut!(
             self.addr,
             T,
-            "called from TypedAddr get, get full information from rust backtrace in debug mode"
+            format!("called from TypedAddr get, addr was: {} get full information from rust backtrace in debug mode", self.addr)
         )
     }
     pub const fn default() -> Self {

@@ -4,7 +4,10 @@ use std::{
 };
 
 use engine_cache::engine_cache::EngineCache;
-use schedule_manager::schedule::{Schedule, ScheduleRunnable};
+use schedule_manager::{
+    schedule::{Schedule, ScheduleRunnable},
+    system_params::system_param::SystemParalellFilter,
+};
 
 use crate::{
     ecs::ecs_manager::EcsManager,
@@ -28,7 +31,8 @@ pub mod target_fps;
 pub struct EngineRuntime {
     pub paralellism: bool,
     pub static_resource_map: HashMap<TypeId, usize>,
-    pub system_locals: HashMap<&'static str, HashMap<u8, Box<dyn Any>>>,
+    pub system_locals: HashMap<String, HashMap<u8, Box<dyn Any>>>,
+    pub system_param_filters: HashMap<String, Vec<Box<dyn SystemParalellFilter>>>,
     pub buffer_manager: BufferManager,
     pub asset_manager: AssetManager,
     pub engine_cache: EngineCache,

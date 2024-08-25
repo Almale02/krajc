@@ -1,5 +1,7 @@
 use std::marker::PhantomData;
 
+use crate::{abi::prelude::*, typed_addr::dupe};
+
 use mopa::mopafy;
 use uuid::Uuid;
 
@@ -17,18 +19,19 @@ use super::system_resource::{EngineResource, Res};
 pub struct SystemParam {
     pub engine: &'static mut EngineRuntime,
     pub position: u8,
-    pub fn_name: &'static str,
+    pub fn_name: String,
 }
 
 pub trait IntoSystemParalellFilter {
-    fn get_filterable(&self) -> Box<dyn SystemParalellFilter>;
+    fn get_filterable(&self) -> Box<dyn SystemParalellFilter + 'static>;
 }
 
 mopa::mopafy!(SystemParalellFilter);
+
 pub trait SystemParalellFilter: mopa::Any {
     /// this is used for checking if 2 systems can run paralell, in other words they are compatible with each other
     /// this returns true if two params are compatible, and false if they not, check the [SystemQueryFilterable][super::system_query::SystemQueryFilterable] as an example
-    fn filter_against_param(&self, param: &Box<dyn SystemParalellFilter>) -> bool;
+    fn filter_against_param(&self, param: &Box<dyn SystemParalellFilter + 'static>) -> bool;
 }
 
 impl<T: EngineResource> From<SystemParam> for Res<T> {
@@ -43,19 +46,19 @@ impl<T: EngineResource> From<SystemParam> for Res<T> {
     }
 }
 
+#[stabby]
 pub struct FunctionSystem<Func: 'static, Marker> {
-    pub name: &'static str,
+    /// Must be *unique*!, by default it is using Uuids
+    pub name: RString,
     pub function: Func,
-    pub param_filters: Vec<Box<dyn SystemParalellFilter>>,
     _p: PhantomData<Marker>,
 }
 
 impl<Func: 'static, Marker> FunctionSystem<Func, Marker> {
     pub fn new(function: Func) -> Self {
         Self {
-            name: Box::leak(Box::new(Uuid::new_v4().to_string())),
+            name: Uuid::new_v4().to_string().into(),
             function,
-            param_filters: Vec::default(),
             _p: PhantomData,
         }
     }
@@ -89,16 +92,19 @@ macro_rules! impl_schedule_runnable {
                 );
             }
             fn setup_filter(&mut self, runtime: &'static mut EngineRuntime) {
-                let runtime = TypedAddr::<EngineRuntime>::new(runtime as *mut _ as usize);
+                //let runtime = TypedAddr::<EngineRuntime>::new(runtime as *mut _ as usize);
+                runtime.system_param_filters.insert(self.name.to_string(), vec![]);
                 let mut position = 0;
                     $(
                         position += 1;
                         let a = std::convert::Into::<$param>::into(SystemParam {
-                            engine: runtime.get(),
+                            engine: dupe(runtime),
                             fn_name: self.name(),
                             position,
                         });
-                        self.param_filters.push(a.get_filterable());
+                        let filters = runtime.system_param_filters.get_mut(&self.name.to_string()).unwrap();
+                        filters.push(a.get_filterable());
+                        //self.param_filters.push(a.get_filterable());
 
                     )*
 
@@ -106,11 +112,11 @@ macro_rules! impl_schedule_runnable {
             fn predicate(&self, _runtime: &'static EngineRuntime) -> bool {
                 true
             }
-            fn name(&self) -> &'static str {
-                self.name
+            fn name(&self) -> String {
+                self.name.clone().into()
             }
-            fn get_params_filters(&self) -> &Vec<Box<dyn SystemParalellFilter>> {
-                &self.param_filters
+            fn get_params_filters(&self, runtime: &'static EngineRuntime) -> &Vec<Box<dyn SystemParalellFilter>> {
+                runtime.system_param_filters.get(&self.name.to_string()).unwrap()
             }
         }
     };

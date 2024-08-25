@@ -1,7 +1,7 @@
 use crate::marker_comps;
 use bevy_ecs::{component::Component, query::Without};
 use glyphon::Attrs;
-use krajc::{system_fn, EngineResource};
+use krajc_macros::{system_fn, EngineResource};
 
 use crate::{
     engine_runtime::schedule_manager::system_params::{

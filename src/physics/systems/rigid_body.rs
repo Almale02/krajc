@@ -4,7 +4,7 @@ use bevy_ecs::{
     entity::Entity,
     query::{Added, Changed, With},
 };
-use krajc::system_fn;
+use krajc_macros::system_fn;
 use rapier3d::dynamics::{IntegrationParameters, IslandManager, RigidBodySet, RigidBodyType};
 
 use crate::{
@@ -231,17 +231,17 @@ pub fn sync_lin_vel_to_physics(
 
 #[rustfmt::skip]
 pub fn physics_systems(runtime: &mut EngineRuntime) {
-    runtime.register_system::<RuntimePhysicsSyncMainSchedule>(sync_physics_transform.into_system());
-    runtime.register_system::<RuntimePhysicsSyncMainSchedule>(sync_fixed_bodies_to_rapier.into_system());
-    runtime.register_system::<RuntimePhysicsSyncMainSchedule>(handle_rigidbody_insert.into_system());
-    runtime.register_system::<RuntimePhysicsSyncMainSchedule>(sync_target_transform_kinematic_body.into_system());
-    runtime.register_system::<RuntimePhysicsSyncMainSchedule>(sync_target_vel_kinematic_body.into_system());
-    runtime.register_system::<RuntimePhysicsSyncMainSchedule>(sync_physics_direct_transform_modification.into_system());
+    runtime.register_system::<RuntimePhysicsSyncMainSchedule>(sync_physics_transform.system());
+    runtime.register_system::<RuntimePhysicsSyncMainSchedule>(sync_fixed_bodies_to_rapier.system());
+    runtime.register_system::<RuntimePhysicsSyncMainSchedule>(handle_rigidbody_insert.system());
+    runtime.register_system::<RuntimePhysicsSyncMainSchedule>(sync_target_transform_kinematic_body.system());
+    runtime.register_system::<RuntimePhysicsSyncMainSchedule>(sync_target_vel_kinematic_body.system());
+    runtime.register_system::<RuntimePhysicsSyncMainSchedule>(sync_physics_direct_transform_modification.system());
 
-    runtime.register_system::<RuntimePhysicsSyncMainSchedule>(sync_ang_vel_to_physics.into_system());
-    runtime.register_system::<RuntimePhysicsSyncMainSchedule>(sync_lin_vel_to_physics.into_system());
+    runtime.register_system::<RuntimePhysicsSyncMainSchedule>(sync_ang_vel_to_physics.system());
+    runtime.register_system::<RuntimePhysicsSyncMainSchedule>(sync_lin_vel_to_physics.system());
 
-    runtime.register_system::<RuntimePhysicsSyncMainSchedule>(mark_static_bodies_trans_changed.into_system());
+    runtime.register_system::<RuntimePhysicsSyncMainSchedule>(mark_static_bodies_trans_changed.system());
 
     collider_systems(runtime);
 }

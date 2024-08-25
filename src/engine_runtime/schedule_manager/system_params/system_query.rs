@@ -60,7 +60,7 @@ where
 
 impl<Data: QueryData, Filter: QueryFilter> SystemQuery<Data, Filter> {
     #[inline]
-    pub fn iter<'w>(&'w mut self) -> QueryIter<'w, 'w, Data::ReadOnly, Filter> {
+    pub fn iter(&mut self) -> QueryIter<'_, '_, Data::ReadOnly, Filter> {
         self.provider.iter(dupe(self.world))
     }
 
@@ -69,24 +69,21 @@ impl<Data: QueryData, Filter: QueryFilter> SystemQuery<Data, Filter> {
     /// This iterator is always guaranteed to return results from each matching entity once and only once.
     /// Iteration order is not guaranteed.
     #[inline]
-    pub fn iter_mut<'w>(&'w mut self) -> QueryIter<'w, 'w, Data, Filter> {
+    pub fn iter_mut(&mut self) -> QueryIter<'_, '_, Data, Filter> {
         self.provider.iter_mut(self.world)
     }
     #[inline]
-    pub fn get<'w>(
-        &'w mut self,
-        entity: Entity,
-    ) -> Result<ROQueryItem<'w, Data>, QueryEntityError> {
+    pub fn get(&mut self, entity: Entity) -> Result<ROQueryItem<'_, Data>, QueryEntityError> {
         self.provider.get(self.world, entity)
     }
     #[inline]
-    pub fn get_mut<'w>(&'w mut self, entity: Entity) -> Result<Data::Item<'w>, QueryEntityError> {
+    pub fn get_mut(&mut self, entity: Entity) -> Result<Data::Item<'_>, QueryEntityError> {
         self.provider.get_mut(self.world, entity)
     }
 
     #[track_caller]
     #[inline]
-    pub fn single<'w>(&'w mut self) -> ROQueryItem<'w, Data> {
+    pub fn single(&mut self) -> ROQueryItem<'_, Data> {
         self.provider.single(self.world)
     }
 
@@ -99,7 +96,7 @@ impl<Data: QueryData, Filter: QueryFilter> SystemQuery<Data, Filter> {
     /// If the number of query results is not exactly one, a [`QuerySingleError`] is returned
     /// instead.
     #[inline]
-    pub fn get_single<'w>(&'w mut self) -> Result<ROQueryItem<'w, Data>, QuerySingleError> {
+    pub fn get_single(&mut self) -> Result<ROQueryItem<'_, Data>, QuerySingleError> {
         self.provider.get_single(self.world)
     }
 
@@ -112,7 +109,7 @@ impl<Data: QueryData, Filter: QueryFilter> SystemQuery<Data, Filter> {
     /// [`get_single_mut`](Self::get_single_mut) to return a `Result` instead of panicking.
     #[track_caller]
     #[inline]
-    pub fn single_mut<'w>(&'w mut self) -> Data::Item<'w> {
+    pub fn single_mut(&mut self) -> Data::Item<'_> {
         self.provider.single_mut(self.world)
     }
 
@@ -122,7 +119,7 @@ impl<Data: QueryData, Filter: QueryFilter> SystemQuery<Data, Filter> {
     /// If the number of query results is not exactly one, a [`QuerySingleError`] is returned
     /// instead.
     #[inline]
-    pub fn get_single_mut<'w>(&'w mut self) -> Result<Data::Item<'w>, QuerySingleError> {
+    pub fn get_single_mut(&mut self) -> Result<Data::Item<'_>, QuerySingleError> {
         self.provider.get_single_mut(self.world)
     }
 
@@ -159,11 +156,11 @@ impl<Data: QueryData, Filter: QueryFilter> SystemQuery<Data, Filter> {
     /// assert_eq!(query_state.get_many(&world, [wrong_entity]), Err(QueryEntityError::NoSuchEntity(wrong_entity)));
     /// ```
     #[inline]
-    pub fn get_many<'w, const N: usize>(
-        &'w mut self,
+    pub fn get_many<const N: usize>(
+        &mut self,
         entities: [Entity; N],
-    ) -> Result<[ROQueryItem<'w, Data>; N], QueryEntityError> {
-        self.provider.get_many(&self.world, entities)
+    ) -> Result<[ROQueryItem<'_, Data>; N], QueryEntityError> {
+        self.provider.get_many(self.world, entities)
     }
 }
 
@@ -197,7 +194,7 @@ where
 
 pub struct EcsWorldFilterable {}
 impl SystemParalellFilter for EcsWorldFilterable {
-    fn filter_against_param(&self, param: &Box<(dyn SystemParalellFilter + 'static)>) -> bool {
+    fn filter_against_param(&self, _param: &Box<(dyn SystemParalellFilter + 'static)>) -> bool {
         false
     }
 }

@@ -6,18 +6,25 @@ use crate::{
     ThreadRawPointer,
 };
 
-use super::system_params::{system_param::SystemParalellFilter, system_resource::EngineResource};
+use super::system_params::{
+    system_param::{FunctionSystem, SystemParalellFilter},
+    system_resource::EngineResource,
+};
 
 pub trait ScheduleRunnable {
     fn run(&mut self, runtime: &'static mut EngineRuntime);
     fn predicate(&self, runtime: &'static EngineRuntime) -> bool;
-    fn name(&self) -> &'static str;
+    fn name(&self) -> String;
     fn setup_filter(&mut self, runtime: &'static mut EngineRuntime);
-    fn get_params_filters(&self) -> &Vec<Box<dyn SystemParalellFilter>>;
+    fn get_params_filters(
+        &self,
+        runtime: &'static EngineRuntime,
+    ) -> &Vec<Box<dyn SystemParalellFilter>>;
 }
 
 pub trait IntoSystem<Marker> {
-    fn into_system(self) -> impl ScheduleRunnable;
+    type Func;
+    fn system(self) -> FunctionSystem<Self::Func, Marker>;
 }
 
 #[macro_export]
@@ -29,7 +36,8 @@ macro_rules! implement_into_system {
             $($param: From<SystemParam> + IntoSystemParalellFilter + 'static),*,
             Func: Fn($($param), *) + 'static,
         {
-            fn into_system(self) -> impl ScheduleRunnable {
+            type Func = Func;
+            fn system(self) -> FunctionSystem<Func, fn($($param),*)> {
                 FunctionSystem::new(self)
             }
         }
@@ -143,7 +151,6 @@ macro_rules! implement_schedule {
                                     for _i in 0..thread_num {
                                         main_tx.send(MainToThreadExecutorMsg::Kill).unwrap();
                                     }
-                                    #[allow(unused_assignments)]
                                     shall_run = false;
                                     break;
                                 }
@@ -365,8 +372,8 @@ pub fn calc_dep_graph(
             let mut compatible_here = true;
             for other_system_id in group.iter().collect::<Vec<_>>() {
                 if !check_if_compatible(
-                    system.get_params_filters(),
-                    ids.get(other_system_id).unwrap().get_params_filters(),
+                    system.get_params_filters(engine),
+                    ids.get(other_system_id).unwrap().get_params_filters(engine),
                 ) {
                     compatible_here = false;
                 }
@@ -393,8 +400,8 @@ pub fn calc_dep_graph(
                 continue;
             }
             if !check_if_compatible(
-                ids.get(i).unwrap().get_params_filters(),
-                ids.get(j).unwrap().get_params_filters(),
+                ids.get(i).unwrap().get_params_filters(engine),
+                ids.get(j).unwrap().get_params_filters(engine),
             ) {
                 deps.insert(*j);
                 other_deps.insert(*i);

@@ -1,7 +1,7 @@
 use std::{collections::HashMap, ops::Range};
 
 use bevy_ecs::{entity::Entity, query::With};
-use krajc::{system_fn, EngineResource, FromEngine};
+use krajc_macros::{system_fn, EngineResource, FromEngine};
 use uuid::Uuid;
 use wgpu::{
     BindGroupLayout, Buffer, CompareFunction, DepthBiasState, DepthStencilState, Face, RenderPass,
