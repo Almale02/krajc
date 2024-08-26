@@ -1,9 +1,6 @@
 use core::panic;
 use std::{fs, marker::PhantomData, path::PathBuf, str::FromStr};
 
-use libloading::Library;
-use stabby::libloading::StabbyLibrary;
-
 use crate::{
     engine_runtime::{
         schedule_manager::{
@@ -82,8 +79,9 @@ impl<Sched: Schedule> ScheduleSystemRegister<Sched> {
     where
         FunctionSystem<Func, Marker>: ScheduleRunnable,
     {
-        //let engine = self.engine.get();
-        //engine.get_resource_mut::<Sched>().register(system);
+        let engine = self.engine.get();
+        engine.register_system::<Sched>(system);
+        dbg!("registered system");
 
         ScheduleSystemRegister::new(self.engine.clone())
     }

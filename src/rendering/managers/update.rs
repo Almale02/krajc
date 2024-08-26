@@ -78,20 +78,3 @@ impl EngineRuntime {
         self.ecs.world.clear_trackers();
     }
 }
-
-trait ContextExt<T> {
-    fn set(&mut self, x: impl FnOnce(&T) -> T);
-    fn with(&self, x: impl FnOnce(&T));
-    fn with_mut(&mut self, x: impl FnOnce(&mut T));
-}
-impl<T> ContextExt<T> for T {
-    fn set(&mut self, x: impl FnOnce(&T) -> T) {
-        *self = x(self)
-    }
-    fn with(&self, x: impl FnOnce(&T)) {
-        x(self)
-    }
-    fn with_mut(&mut self, x: impl FnOnce(&mut T)) {
-        x(self)
-    }
-}

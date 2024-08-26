@@ -62,6 +62,13 @@ impl<Func: 'static, Marker> FunctionSystem<Func, Marker> {
             _p: PhantomData,
         }
     }
+    pub fn new_with_name(function: Func, name: &'static str) -> Self {
+        Self {
+            name: name.to_owned().into(),
+            function,
+            _p: PhantomData,
+        }
+    }
 }
 
 macro_rules! impl_schedule_runnable {

@@ -5,6 +5,7 @@ use crate::engine_runtime::EngineRuntime;
 use super::RenderManagerResource;
 
 impl EngineRuntime {
+    #[allow(deprecated, unreachable_patterns)]
     pub fn window_events(&mut self, event: &WindowEvent) -> bool {
         let render_state = self.get_resource_mut::<RenderManagerResource>();
         match event {

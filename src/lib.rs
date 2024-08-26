@@ -3,22 +3,23 @@
 //#![deny(unused_imports)]
 #![allow(clippy::type_complexity)]
 
+// this aint happening now!
+//#![deny(warnings)]
 
 pub mod prelude {
+    pub use krajc_macros::*;
+    pub use crate::span;
     pub use bevy_ecs;
     pub use rapier3d;
     pub use libloading;
     pub use stabby;
     pub use crate::abi::prelude::*;
     pub use crate::run;
+    pub use tracing_tracy;
     
 }
-
-
-
 use crate::rendering::{builtin_materials::texture_material::material::update_texture_material, systems::general::update_rendering};
 
-use abi::system_interface::{get_game_plugin_path, SystemPlugin, SystemPluginRegister};
 use bevy_ecs::query::With;
 use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
 use gilrs::Gilrs;
@@ -32,6 +33,7 @@ use physics::{
     systems::rigid_body::physics_systems,
     Gravity,
 };
+use prelude::{SystemPlugin, SystemPluginRegister};
 use rapier3d::{
     dynamics::RigidBodyType,
     geometry::ColliderShape,
@@ -318,8 +320,7 @@ fn sync_arrow(
     *arrow = UnitQuaternion::from_matrix(&camera.rot_matrix);
 }
 
-pub async fn run(game: Library) {
-    //dbg!("a");
+pub async fn run(game: SystemPlugin) {
     let runtime = EngineRuntime::init();
 
     runtime
@@ -440,6 +441,8 @@ pub async fn run(game: Library) {
     /*runtime
     .register_system::<RuntimePostPhysicsSyncSchedule>(update_texture_material.system());*/
 
+    (game.register_systems)(SystemPluginRegister::new());
+
     runtime.register_system::<RuntimeUpdateSchedule>(make_light_follow_camera.system());
 
     physics_systems(runtime);
@@ -447,12 +450,6 @@ pub async fn run(game: Library) {
     /*AppBuilder::register_systems(|a| {
         a.register(RuntimeEngineLoadSchedule, startup, other_things);
     }).build();*/
-
-    let plugin = unsafe {
-        StabbyLibrary::get_stabbied::<extern "C" fn() -> SystemPlugin>(&game, b"get_plugin")
-    };
-    
-    //panic!("afrfgerteritjeroitjerotjerotjej");
 
     dupe(runtime)
         .get_resource_mut::<RuntimeEngineLoadSchedule>()
@@ -648,6 +645,7 @@ pub async fn run(game: Library) {
         tracing_tracy::client::frame_mark();
 
         if !should_run {
+            //game.close().unwrap();
             break;
         }
     }
@@ -750,48 +748,53 @@ enum LateinitEnum<T> {
     Some(T),
     Uninited,
 }
+
+/// Basically rebranded null because unlike an `Option`, you *dont* have to check if it *has value*,
+/// the *library* which returns these to the users needs to *ensure* that the value is *present*
 #[derive(Debug)]
 pub struct Lateinit<T> {
-    value: LateinitEnum<T>,
+    value: Option<T>,
 }
 unsafe impl<T> Send for Lateinit<T> {}
 
 impl<T> Lateinit<T> {
     pub fn new(data: T) -> Self {
         Self {
-            value: LateinitEnum::Some(data),
+            value: Some(data),
         }
     }
-    fn set(&mut self, value: T) {
-        self.value = LateinitEnum::<T>::Some(value);
+    pub fn set(&mut self, value: T) {
+        self.value = Some(value);
     }
     pub fn as_option(&self) -> Option<&T> {
         match &self.value {
-            LateinitEnum::Some(val) => Some(val),
-            LateinitEnum::Uninited => None,
+            Some(val) => Some(val),
+            None => None,
         }
     }
     pub fn as_option_mut(&mut self) -> Option<&mut T> {
         match &mut self.value {
-            LateinitEnum::Some(val) => Some(val),
-            LateinitEnum::Uninited => None,
+            Some(val) => Some(val),
+            None => None,
         }
     }
     pub const fn default_const() -> Self {
         Lateinit {
-            value: LateinitEnum::Uninited,
+            value: None ,
         }
     }
-    pub fn consume(self) -> T {
-        match self.value {
-            LateinitEnum::Some(x) => x,
-            LateinitEnum::Uninited => panic!("attempted to consume an uninited Lateinit"),
+    pub fn consume(&mut self) -> T {
+        match self.value.take() {
+            Some(x) => {
+                x
+            },
+            None => panic!("attempted to consume an uninited Lateinit"),
         }
     }
     pub fn get(&self) -> &T {
         match &self.value {
-            LateinitEnum::Some(value) => value,
-            LateinitEnum::Uninited => {
+            Some(value) => value,
+            None => {
                 panic!(
                     "dereferenced an uninited value with type {:?}",
                     type_name::<T>()
@@ -801,8 +804,8 @@ impl<T> Lateinit<T> {
     }
     pub fn get_mut(&mut self) -> &mut T {
         match &mut self.value {
-            LateinitEnum::Some(value) => value,
-            LateinitEnum::Uninited => {
+            Some(value) => value,
+            None => {
                 panic!(
                     "dereferenced an uninited value with type {:?}",
                     type_name::<T>()
@@ -815,8 +818,8 @@ impl<T> Deref for Lateinit<T> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
         match &self.value {
-            LateinitEnum::Some(value) => value,
-            LateinitEnum::Uninited => {
+            Some(value) => value,
+            None => {
                 panic!(
                     "dereferenced an uninited value with type {:?}",
                     type_name::<T>()
@@ -828,8 +831,8 @@ impl<T> Deref for Lateinit<T> {
 impl<T> DerefMut for Lateinit<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         match &mut self.value {
-            LateinitEnum::Some(value) => value,
-            LateinitEnum::Uninited => {
+            Some(value) => value,
+            None => {
                 panic!(
                     "dereferenced an uninited value with type {:?}",
                     type_name::<T>()
@@ -841,18 +844,18 @@ impl<T> DerefMut for Lateinit<T> {
 impl<T> Default for Lateinit<T> {
     fn default() -> Self {
         Self {
-            value: LateinitEnum::Uninited,
+            value: None ,
         }
     }
 }
 impl<T: Clone> Clone for Lateinit<T> {
     fn clone(&self) -> Self {
         let value = match &self.value {
-            LateinitEnum::Some(value) => value,
-            LateinitEnum::Uninited => panic!("tried to clone an uninited value"),
+            Some(value) => value,
+            None => panic!("tried to clone an uninited value"),
         };
         Self {
-            value: LateinitEnum::Some(value.clone()),
+            value: Some(value.clone()),
         }
     }
 }

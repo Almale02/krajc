@@ -92,7 +92,7 @@ impl EngineRuntime {
             .expect("failed");
 
         drop(instance);
-        let mut first_limits = Limits::default();
+        let first_limits = Limits::default();
 
         let second_limits = Limits::downlevel_webgl2_defaults();
 

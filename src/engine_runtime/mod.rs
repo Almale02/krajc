@@ -83,7 +83,12 @@ impl EngineRuntime {
     pub fn register_system<T: Schedule>(&mut self, system: impl ScheduleRunnable + 'static) {
         self.get_resource_mut::<T>().register(system);
     }
-    pub fn register_system_dyn<T: Schedule>(&mut self, system: impl ScheduleRunnable + 'static) {
+    pub fn register_system_dyn<T: Schedule>(
+        &mut self,
+        mut system: impl ScheduleRunnable + 'static,
+    ) {
+        println!("registered dynamically with name: {}", &system.name());
+        system.run(dupe(self));
         self.get_resource_mut::<T>().register_dyn(Box::new(system));
     }
 }

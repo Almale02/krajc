@@ -3,6 +3,7 @@ use std::marker::PhantomData;
 use stabby::stabby;
 
 #[macro_export]
+#[allow(deref_nullptr)]
 macro_rules! addr_ptr_to_ref_mut {
     ($ptr: expr, $ty: ty, $msg: expr) => {
         unsafe {
