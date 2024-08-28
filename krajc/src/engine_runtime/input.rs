@@ -4,6 +4,7 @@ use krajc_macros::EngineResource;
 use winit::event::{ButtonId, ElementState, ModifiersState, VirtualKeyCode};
 
 use crate::typed_addr::dupe;
+use shared_lib::prelude::*;
 
 #[derive(EngineResource, Debug)]
 pub struct KeyboardInput {

@@ -18,13 +18,12 @@ default = ["bevy_reflect"]
 serialize = ["dep:serde"]
 
 [dependencies]
-bevy_ptr = { path = "../bevy_deps/bevy_ptr", version = "0.15.0-dev" }
-bevy_reflect = { path = "../bevy_deps/bevy_reflect", version = "0.15.0-dev", optional = true }
-bevy_tasks = { path = "../bevy_deps/bevy_tasks", version = "0.15.0-dev" }
-bevy_utils = { path = "../bevy_deps/bevy_utils", version = "0.15.0-dev" }
+bevy_ptr = { path = "../bevy-deps/bevy_ptr", version = "0.15.0-dev" }
+bevy_reflect = { path = "../bevy-deps/bevy_reflect", version = "0.15.0-dev", optional = true }
+bevy_tasks = { path = "../bevy-deps/bevy_tasks", version = "0.15.0-dev" }
+bevy_utils = { path = "../bevy-deps/bevy_utils", version = "0.15.0-dev" }
 bevy_ecs_macros = { path = "macros", version = "0.15.0-dev" }
 
-krajc = { path = "../krajc" }
 
 petgraph = "0.6"
 bitflags = "2.3"

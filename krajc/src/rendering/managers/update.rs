@@ -14,7 +14,13 @@ use crate::{
         },
         EngineRuntime,
     },
-    physics::{physics_world::PhysicsWorld, Gravity},
+    physics::{
+        physics_world::{
+            BroadPhase, CcdSolver, ColliderSet, ImpulseJointSet, IslandManager, MultibodyJointSet,
+            NarrowPhase, PhysicsPipeline, QueryPipeline, RigidBodySet,
+        },
+        Gravity,
+    },
     typed_addr::dupe,
     ENGINE_RUNTIME,
 };
@@ -25,7 +31,6 @@ impl EngineRuntime {
 
         let _dt_f64 = dt.as_secs_f64();
 
-        let physics = self.get_resource_mut::<PhysicsWorld>();
         let gravity = self.get_resource_mut::<Gravity>();
 
         let engine = unsafe { ENGINE_RUNTIME.get() };
@@ -57,24 +62,23 @@ impl EngineRuntime {
 
         crate::span!(trace_physics, "physics");
 
-        dupe(&physics).physics_pipeline.step(
+        engine.get_resource_mut::<PhysicsPipeline>().0.step(
             &gravity.0,
             &IntegrationParameters::default(),
-            &mut dupe(&physics).island_manager,
-            &mut dupe(&physics).broad_phase,
-            &mut dupe(&physics).narrow_phase,
-            &mut dupe(&physics).rigid_body_set,
-            &mut dupe(&physics).collider_set,
-            &mut dupe(&physics).impulse_joint_set,
-            &mut dupe(&physics).multibody_joint_set,
-            &mut dupe(&physics).ccd_solver,
-            Some(&mut dupe(&physics).query_pipeline),
+            &mut engine.get_resource_mut::<IslandManager>().0,
+            &mut engine.get_resource_mut::<BroadPhase>().0,
+            &mut engine.get_resource_mut::<NarrowPhase>().0,
+            &mut engine.get_resource_mut::<RigidBodySet>().0,
+            &mut engine.get_resource_mut::<ColliderSet>().0,
+            &mut engine.get_resource_mut::<ImpulseJointSet>().0,
+            &mut engine.get_resource_mut::<MultibodyJointSet>().0,
+            &mut engine.get_resource_mut::<CcdSolver>().0,
+            Some(&mut engine.get_resource_mut::<QueryPipeline>().0),
             &event_handler,
             &event_handler,
         );
 
         drop_span!(trace_physics);
-        //self.ecs.world.increment_change_tick();
 
         self.ecs.world.clear_trackers();
     }

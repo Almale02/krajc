@@ -1,6 +1,5 @@
 use bevy_ecs::{entity::Entity, query::Added};
 use krajc_macros::system_fn;
-use rapier3d::{dynamics::RigidBodySet, geometry::ColliderSet};
 
 use crate::{
     engine_runtime::{
@@ -13,7 +12,7 @@ use crate::{
     },
     physics::{
         components::{collider::Collider, general::RigidBodyHandle},
-        physics_world::PhysicsMappings,
+        physics_world::{ColliderSet, PhysicsMappings, RigidBodySet},
     },
 };
 
@@ -31,8 +30,11 @@ pub fn handle_collider_insert(
         //println!("Inserted collider for entity: {:?}", entity);
         mappings.added_colliders.insert(entity);
 
-        let coll_handle =
-            collider_set.insert_with_parent(coll.0.clone(), rigidbody_handle.0, &mut rigidbody_set);
+        let coll_handle = collider_set.0.insert_with_parent(
+            coll.0.clone(),
+            rigidbody_handle.0,
+            &mut rigidbody_set.0,
+        );
 
         mappings
             .collider_entity

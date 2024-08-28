@@ -5,7 +5,7 @@ use bevy_ecs::{
     query::{Added, Changed, With},
 };
 use krajc_macros::system_fn;
-use rapier3d::dynamics::{IntegrationParameters, IslandManager, RigidBodySet, RigidBodyType};
+use rapier3d::dynamics::{IntegrationParameters, RigidBodyType};
 
 use crate::{
     engine_runtime::{
@@ -25,7 +25,7 @@ use crate::{
             PhysicsSyncDirectBodyModifications, RigidBody as RB, RigidBodyHandle as RBHandle,
             TargetKinematicTransform, TargetKinematicVelocity,
         },
-        physics_world::{PhysicsMappings, PhysicsWorld},
+        physics_world::{IslandManager, PhysicsMappings, RigidBodySet},
         Gravity,
     },
     rendering::systems::general::Transform,
@@ -33,27 +33,6 @@ use crate::{
 };
 
 use super::collider::collider_systems;
-
-#[system_fn]
-pub fn step_physics(physics: Res<PhysicsWorld>, gravity: Res<Gravity>) {
-    let event_handler = ();
-
-    dupe(&physics).physics_pipeline.step(
-        &gravity.0,
-        &IntegrationParameters::default(),
-        &mut dupe(&physics).island_manager,
-        &mut dupe(&physics).broad_phase,
-        &mut dupe(&physics).narrow_phase,
-        &mut dupe(&physics).rigid_body_set,
-        &mut dupe(&physics).collider_set,
-        &mut dupe(&physics).impulse_joint_set,
-        &mut dupe(&physics).multibody_joint_set,
-        &mut dupe(&physics).ccd_solver,
-        Some(&mut dupe(&physics).query_pipeline),
-        &event_handler,
-        &event_handler,
-    )
-}
 
 #[system_fn]
 pub fn handle_rigidbody_insert(
@@ -74,10 +53,10 @@ pub fn handle_rigidbody_insert(
 
         let body_type = created.body_type();
 
-        let handle = rigid_body_set.insert(created);
+        let handle = rigid_body_set.0.insert(created);
 
         ecs.entity_mut(entity).insert((
-            RBHandle::new(handle, dupe(&*rigid_body_set)),
+            RBHandle::new(handle, dupe(&rigid_body_set.0)),
             AngularVelocity::default(),
             LinearVelocity::default(),
         ));
@@ -119,13 +98,14 @@ pub fn sync_physics_transform(
     rigidbody_set: Res<RigidBodySet>,
 ) {
     island_manager
+        .0
         .active_dynamic_bodies()
         .iter()
-        .chain(island_manager.active_kinematic_bodies())
+        .chain(island_manager.0.active_kinematic_bodies())
         .for_each(|handle| {
             let entity = mappings.rigidbody_entity.get_by_left(handle).unwrap();
             let (mut trans, sync_rotation) = transforms.get_mut(*entity).unwrap();
-            let body = rigidbody_set.get(*handle).unwrap();
+            let body = rigidbody_set.0.get(*handle).unwrap();
 
             *trans = Transform::new(*body.position());
 
@@ -141,7 +121,7 @@ pub fn sync_fixed_bodies_to_rapier(
     mut fixed: SystemQuery<(&RBHandle, &Transform), (With<FixedRigidBody> /*Changed<Transform>*/,)>,
 ) {
     for (handle, trans) in fixed.iter() {
-        let body = rigidbody_set.get_mut(**handle).unwrap();
+        let body = rigidbody_set.0.get_mut(**handle).unwrap();
 
         body.set_position(**trans, true);
     }
@@ -158,6 +138,7 @@ pub fn sync_target_transform_kinematic_body(
     for (target, handle) in target_transform.iter() {
         //dbg!(*target.0);
         bodies
+            .0
             .get_mut(handle.0)
             .unwrap()
             .set_next_kinematic_position(*target.0)
@@ -173,10 +154,12 @@ pub fn sync_target_vel_kinematic_body(
 ) {
     for (target, handle) in target_transform.iter() {
         bodies
+            .0
             .get_mut(handle.0)
             .unwrap()
             .set_linvel(target.lin_vel, true);
         bodies
+            .0
             .get_mut(handle.0)
             .unwrap()
             .set_angvel(target.ang_vel, true);
@@ -192,7 +175,7 @@ pub fn sync_physics_direct_transform_modification(
     mut rigidbody_set: Res<RigidBodySet>,
 ) {
     for (transform, handle) in transforms.iter() {
-        let body = rigidbody_set.get_mut(handle.0).unwrap();
+        let body = rigidbody_set.0.get_mut(handle.0).unwrap();
 
         body.set_position(transform.iso, true)
     }
@@ -211,7 +194,7 @@ pub fn sync_ang_vel_to_physics(
     mut rigidbody_set: Res<RigidBodySet>,
 ) {
     for (handle, ang_vel) in ang_vels.iter() {
-        let body = rigidbody_set.get_mut(handle.0).unwrap();
+        let body = rigidbody_set.0.get_mut(handle.0).unwrap();
 
         body.set_angvel(ang_vel.0, true)
     }
@@ -223,7 +206,7 @@ pub fn sync_lin_vel_to_physics(
     mut rigidbody_set: Res<RigidBodySet>,
 ) {
     for (handle, lin_vel) in lin_vels.iter() {
-        let body = rigidbody_set.get_mut(handle.0).unwrap();
+        let body = rigidbody_set.0.get_mut(handle.0).unwrap();
 
         body.set_linvel(lin_vel.0, true);
     }

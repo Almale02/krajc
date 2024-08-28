@@ -3,7 +3,6 @@ use std::process::Command;
 #[deny(unused_imports)]
 #[deny(warnings)]
 use krajc::prelude::*;
-use krajc::{typed_addr::dupe, Lateinit};
 use libloading::Library;
 use stabby::libloading::StabbyLibrary;
 
@@ -16,10 +15,10 @@ fn main() {
     // this is a really stupid bug in libloading, for some reason if i load a library with libloading, then when the function which called libloading finishes,
     // it just freezez, thats why it needs to run in a seperate thread because it is not present there
     // also i have implemented Send for Lateinit, not because it is safe, but because it is easier to use
-    let x = unsafe { Library::new(game_path).unwrap() };
+    let lib = unsafe { Library::new(game_path).unwrap() };
 
     let plugin = unsafe {
-        StabbyLibrary::get_stabbied::<extern "C" fn() -> SystemPlugin>(&x, b"get_plugin").unwrap()
+        StabbyLibrary::get_stabbied::<extern "C" fn() -> SystemPlugin>(&lib, b"get_plugin").unwrap()
     }();
 
     //lib.set(plugin());

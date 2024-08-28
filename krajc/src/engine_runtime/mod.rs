@@ -11,7 +11,6 @@ use schedule_manager::{
 
 use crate::{
     ecs::ecs_manager::EcsManager,
-    physics::physics_world::PhysicsWorld,
     rendering::{
         asset::AssetManager, buffer_manager::buffer_manager::BufferManager,
         managers::RenderManagerResource,
@@ -39,7 +38,6 @@ pub struct EngineRuntime {
     pub asset_manager: AssetManager,
     pub engine_cache: EngineCache,
     pub ecs: EcsManager,
-    pub physics: PhysicsWorld,
     pub test_map: HashMap<i32, i32>,
 }
 
