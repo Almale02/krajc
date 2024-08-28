@@ -1,0 +1,8 @@
+[package]
+name = "krajc-runtime"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+krajc = { path = "../krajc", features = ["prod"] }
+tokio = "1.39.3"

@@ -1,0 +1,79 @@
+/*use bgfx_rs::{bgfx::*, *};
+
+const fn rgb_to_u32(red: u8, green: u8, blue: u8, alpha: u8) -> u32 {
+    // Use masking to isolate relevant bits
+    const BLUE_MASK: u32 = 0xFF << 16;
+    const GREEN_MASK: u32 = 0xFF << 8;
+    const RED_MASK: u32 = 0xFF;
+
+    // Combine shifted and masked channels with bitwise OR (order flipped for BGR)
+    ((alpha as u32) << 24) | ((blue as u32) << 16) | ((green as u32) << 8) | (red as u32)
+}
+
+static COLOR: u32 = rgb_to_u32(255, 0, 0, 255);
+
+#[repr(packed)]
+#[derive(Debug, Clone, Copy)]
+pub struct PosColorVertex {
+    _x: f32,
+    _y: f32,
+    _z: f32,
+    _abgr: u32,
+}
+impl PosColorVertex {
+    pub fn getVertexLayout() -> BuiltVertexLayout {
+        bgfx::VertexLayoutBuilder::begin(RendererType::Noop)
+            .add(Attrib::Position, 3, AttribType::Float, AddArgs::default())
+            .add(
+                Attrib::Color0,
+                4,
+                AttribType::Uint8,
+                AddArgs {
+                    normalized: true,
+                    as_int: false,
+                },
+            )
+            .end()
+    }
+}
+
+pub struct Mesh {
+    pub vertexes: Box<[PosColorVertex]>,
+    pub indices: Box<[u16]>,
+}
+
+impl Mesh {
+    pub fn cube() -> Self {
+        #[rustfmt::skip]
+        let vertex = [
+            PosColorVertex{ _x: -1.0, _y: 1.0, _z: 1.0, _abgr: COLOR },
+            PosColorVertex{ _x: 1.0, _y: 1.0, _z: 1.0, _abgr: COLOR },
+            PosColorVertex{ _x: -1.0, _y: -1.0, _z: 1.0, _abgr: COLOR },
+            PosColorVertex{ _x: 1.0, _y: -1.0, _z: 1.0, _abgr: COLOR },
+            PosColorVertex{ _x: -1.0, _y: 1.0, _z: -1.0, _abgr: COLOR },
+            PosColorVertex{ _x: 1.0, _y: 1.0, _z: -1.0, _abgr: COLOR },
+            PosColorVertex{ _x: -1.0, _y: -1.0, _z: -1.0, _abgr: COLOR },
+            PosColorVertex{ _x: 1.0, _y: -1.0, _z: -1.0, _abgr: COLOR },
+        ];
+        let index = [
+            0, 1, 2, // 0
+            1, 3, 2,
+            4, 6, 5, // 2
+            5, 6, 7,
+            0, 2, 4, // 4
+            4, 2, 6,
+            1, 5, 3, // 6
+            5, 7, 3,
+            0, 4, 1, // 8
+            4, 5, 1,
+            2, 3, 6, // 10
+            6, 3, 7,
+        ];
+        Self {
+            vertexes: Box::new(vertex),
+            indices: Box::new(index)
+        }
+    }
+}
+
+*/

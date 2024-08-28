@@ -1,0 +1,10 @@
+[workspace]
+members = [
+  "bevy-ecs",
+  "krajc",
+  "krajc-runtime",
+  "bevy_ptr",
+  "bevy_reflect",
+  "bevy_tasks",
+  "bevy_utils", "krajc_macros",
+]

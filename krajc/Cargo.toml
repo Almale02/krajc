@@ -1,0 +1,71 @@
+[package]
+name = "krajc"
+version = "0.0.1"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+exclude = ["resources/*"]
+
+[dependencies]
+env_logger = "0.11.3"
+log = "0.4.21"
+wgpu = "0.18.0"
+winit = "0.28"
+bytemuck = { version = "1.15.0", features = ["derive"] }
+image = { version = "0.25.1", features = ["png", "jpeg"] }
+anyhow = "1.0.81"
+ordered-float = "4.2.0"
+dyn-clone = "1.0.17"
+mopa = "0.2.2"
+lazy_static = "1.4.0"
+pollster = "0.3.0"
+syn = { version = "1.0", features = ["full"] }
+quote = "1.0"
+queues = "1.1.0"
+
+bevy_ecs = {path = "../bevy-ecs/"}
+flume = "0.11.0"
+rapier3d = { version = "0.21.0" }
+bimap = "0.6.3"
+tracing-tracy = "0.11.1"
+uuid = { version = "1.10.0", features = ["v4"] }
+tokio = { version = "1.39.2", features = ["fs", "full", "io-std", "io-util", "rt", "sync"] }
+futures = "0.3.30"
+async-trait = "0.1.81"
+spin_sleep = "1.2.0"
+async-lock = "3.4.0"
+tobj = "4.0.2"
+glyphon = "0.4.1"
+gilrs = "0.10.9"
+strum = "0.26.3"
+abi_stable = "0.11.3"
+libloading = "0.8.5"
+stabby = { version = "36.1.1", features = ["libloading"] }
+
+dirs-next = "2.0"
+
+krajc_macros = { path = "../krajc_macros"}
+
+[build-dependencies]
+clippy = "0.0.302"
+
+
+[features]
+prod = []
+
+[profile.release]
+opt-level = 3
+codeget-units = 1
+
+[profile.dev]
+debug = true
+opt-level = 3
+codeget-units = 1
+
+debug-assertions = false
+overflow-checks = false
+
+[profile.dev.package.rapier3d]
+opt-level = 3
+codeget-units = 1
