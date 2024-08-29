@@ -24,6 +24,8 @@ bevy_tasks = { path = "../bevy-deps/bevy_tasks", version = "0.15.0-dev" }
 bevy_utils = { path = "../bevy-deps/bevy_utils", version = "0.15.0-dev" }
 bevy_ecs_macros = { path = "macros", version = "0.15.0-dev" }
 
+shared-lib = {path = "../shared-lib"}
+
 
 petgraph = "0.6"
 bitflags = "2.3"

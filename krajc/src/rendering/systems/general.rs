@@ -24,7 +24,7 @@ use krajc_macros::system_fn;
 use rapier3d::na::Isometry3;
 use rapier3d::na::Translation3;
 use rapier3d::na::Vector3;
-use winit::event::VirtualKeyCode;
+use winit::keyboard::KeyCode;
 
 use crate::Res;
 
@@ -167,7 +167,7 @@ pub fn make_light_follow_camera(
     keyboard: Res<KeyboardInput>,
     mut should_sync: Local<bool>,
 ) {
-    if keyboard.is_pressed(VirtualKeyCode::F) {
+    if keyboard.is_pressed(KeyCode::KeyF) {
         *should_sync = !*should_sync;
     }
     if !*should_sync {

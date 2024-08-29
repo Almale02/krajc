@@ -1,21 +1,22 @@
 use std::collections::{HashMap, HashSet};
 
 use krajc_macros::EngineResource;
-use winit::event::{ButtonId, ElementState, ModifiersState, VirtualKeyCode};
+use winit::{
+    event::{ButtonId, ElementState},
+    keyboard::KeyCode,
+};
 
 use crate::typed_addr::dupe;
 use shared_lib::prelude::*;
 
 #[derive(EngineResource, Debug)]
 pub struct KeyboardInput {
-    pub key_events: HashSet<(VirtualKeyCode, ElementState, ModifiersState)>,
-    pub key_states: HashMap<VirtualKeyCode, ElementState>,
-    prev_key_states: HashMap<VirtualKeyCode, ElementState>,
+    pub key_states: HashMap<KeyCode, ElementState>,
+    prev_key_states: HashMap<KeyCode, ElementState>,
 }
 impl KeyboardInput {
     pub fn new() -> Self {
         let mut input = Self {
-            key_events: HashSet::default(),
             key_states: HashMap::default(),
             prev_key_states: HashMap::default(),
         };
@@ -24,224 +25,226 @@ impl KeyboardInput {
         input
     }
     /// Fires once when pressed, matches only when no modifier is pressed
-    pub fn is_pressed(&self, key: VirtualKeyCode) -> bool {
-        self.key_events
-            .contains(&(key, ElementState::Pressed, ModifiersState::default()))
+    pub fn is_pressed(&self, key: KeyCode) -> bool {
+        self.key_states.get(&key).unwrap() == &ElementState::Pressed
             && self.prev_key_states.get(&key).unwrap() == &ElementState::Released
     }
-    /// Fires once when pressed, uses custom modifiers, like control, shift, and alt
-    pub fn is_pressed_mod(&self, key: VirtualKeyCode, modifier: ModifiersState) -> bool {
-        self.key_events
-            .contains(&(key, ElementState::Pressed, modifier))
+    /// Fires once when pressed
+    pub fn is_released(&self, key: KeyCode) -> bool {
+        self.key_states.get(&key).unwrap() == &ElementState::Pressed
             && self.prev_key_states.get(&key).unwrap() == &ElementState::Released
-    }
-    /// Fires once when pressed, matches only when no modifier is pressed
-    pub fn is_released(&self, key: VirtualKeyCode) -> bool {
-        self.key_events
-            .contains(&(key, ElementState::Released, ModifiersState::default()))
-            && self.prev_key_states.get(&key).unwrap() == &ElementState::Pressed
-    }
-    /// Fires once when released, uses custom modifiers, like control, shift, and alt
-    pub fn is_released_mod(&self, key: VirtualKeyCode, modifier: ModifiersState) -> bool {
-        self.key_events
-            .contains(&(key, ElementState::Released, modifier))
-            && self.prev_key_states.get(&key).unwrap() == &ElementState::Pressed
     }
     /// Constantly fires while the key is being pressed down, only fires when no modifier is being pressed down
-    pub fn is_held_down(&self, key: VirtualKeyCode) -> bool {
+    pub fn is_held_down(&self, key: KeyCode) -> bool {
         self.key_states.get(&key).unwrap() == &ElementState::Pressed
     }
 
     pub fn reset_events(&mut self) {
         self.prev_key_states = self.key_states.clone();
-        self.key_events.clear();
     }
-    pub fn register_input(
-        &mut self,
-        key: VirtualKeyCode,
-        state: ElementState,
-        modifier: ModifiersState,
-    ) {
-        self.key_events.insert((key, state, modifier));
-
+    pub fn register_input(&mut self, key: KeyCode, state: ElementState) {
         *self.key_states.get_mut(&key).unwrap() = state;
     }
     #[rustfmt::skip]
     fn fill_up_states(&mut self) {
-        self.key_states.insert(VirtualKeyCode::Key1, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Key2, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Key3, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Key4, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Key5, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Key6, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Key7, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Key8, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Key9, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Key0, ElementState::Released);
 
-        self.key_states.insert(VirtualKeyCode::A, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::B, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::C, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::D, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::E, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::F, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::G, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::H, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::I, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::J, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::K, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::L, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::M, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::N, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::O, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::P, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Q, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::R, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::S, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::T, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::U, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::V, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::W, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::X, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Y, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Z, ElementState::Released);
 
-        self.key_states.insert(VirtualKeyCode::Escape, ElementState::Released);
-
-        self.key_states.insert(VirtualKeyCode::F1, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::F2, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::F3, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::F4, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::F5, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::F6, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::F7, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::F8, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::F9, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::F10, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::F11, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::F12, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::F13, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::F14, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::F15, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::F16, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::F17, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::F18, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::F19, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::F20, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::F21, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::F22, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::F23, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::F24, ElementState::Released);
-
-        self.key_states.insert(VirtualKeyCode::Snapshot, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Scroll, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Pause, ElementState::Released);
-
-        self.key_states.insert(VirtualKeyCode::Insert, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Home, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Delete, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::End, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::PageDown, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::PageUp, ElementState::Released);
-
-        self.key_states.insert(VirtualKeyCode::Left, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Up, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Right, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Down, ElementState::Released);
-
-        self.key_states.insert(VirtualKeyCode::Back, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Return, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Space, ElementState::Released);
-
-        self.key_states.insert(VirtualKeyCode::Compose, ElementState::Released);
-
-        self.key_states.insert(VirtualKeyCode::Caret, ElementState::Released);
-
-        self.key_states.insert(VirtualKeyCode::Numlock, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Numpad0, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Numpad1, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Numpad2, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Numpad3, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Numpad4, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Numpad5, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Numpad6, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Numpad7, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Numpad8, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Numpad9, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::NumpadAdd, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::NumpadDivide, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::NumpadDecimal, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::NumpadComma, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::NumpadEnter, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::NumpadEquals, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::NumpadMultiply, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::NumpadSubtract, ElementState::Released);
-
-        self.key_states.insert(VirtualKeyCode::AbntC1, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::AbntC2, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Apostrophe, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Apps, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Asterisk, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::At, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Ax, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Backslash, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Calculator, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Capital, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Colon, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Comma, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Convert, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Equals, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Grave, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Kana, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Kanji, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::LAlt, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::LBracket, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::LControl, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::LShift, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::LWin, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Mail, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::MediaSelect, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::MediaStop, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Minus, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Mute, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::MyComputer, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::NavigateForward, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::NavigateBackward, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::NextTrack, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::NoConvert, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::OEM102, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Period, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::PlayPause, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Plus, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Power, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::PrevTrack, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::RAlt, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::RBracket, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::RControl, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::RShift, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::RWin, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Semicolon, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Slash, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Sleep, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Stop, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Sysrq, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Tab, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Underline, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Unlabeled, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::VolumeDown, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::VolumeUp, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Wake, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::WebBack, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::WebFavorites, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::WebForward, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::WebHome, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::WebRefresh, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::WebSearch, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::WebStop, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Yen, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Copy, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Paste, ElementState::Released);
-        self.key_states.insert(VirtualKeyCode::Cut, ElementState::Released);
+        self.key_states.insert(KeyCode::Backquote, ElementState::Released);
+        self.key_states.insert(KeyCode::Backslash, ElementState::Released);
+        self.key_states.insert(KeyCode::BracketLeft, ElementState::Released);
+        self.key_states.insert(KeyCode::BracketRight, ElementState::Released);
+        self.key_states.insert(KeyCode::Comma, ElementState::Released);
+        self.key_states.insert(KeyCode::Digit0, ElementState::Released);
+        self.key_states.insert(KeyCode::Digit1, ElementState::Released);
+        self.key_states.insert(KeyCode::Digit2, ElementState::Released);
+        self.key_states.insert(KeyCode::Digit3, ElementState::Released);
+        self.key_states.insert(KeyCode::Digit4, ElementState::Released);
+        self.key_states.insert(KeyCode::Digit5, ElementState::Released);
+        self.key_states.insert(KeyCode::Digit6, ElementState::Released);
+        self.key_states.insert(KeyCode::Digit7, ElementState::Released);
+        self.key_states.insert(KeyCode::Digit8, ElementState::Released);
+        self.key_states.insert(KeyCode::Digit9, ElementState::Released);
+        self.key_states.insert(KeyCode::Equal, ElementState::Released);
+        self.key_states.insert(KeyCode::IntlBackslash, ElementState::Released);
+        self.key_states.insert(KeyCode::IntlRo, ElementState::Released);
+        self.key_states.insert(KeyCode::IntlYen, ElementState::Released);
+        self.key_states.insert(KeyCode::KeyA, ElementState::Released);
+        self.key_states.insert(KeyCode::KeyB, ElementState::Released);
+        self.key_states.insert(KeyCode::KeyC, ElementState::Released);
+        self.key_states.insert(KeyCode::KeyD, ElementState::Released);
+        self.key_states.insert(KeyCode::KeyE, ElementState::Released);
+        self.key_states.insert(KeyCode::KeyF, ElementState::Released);
+        self.key_states.insert(KeyCode::KeyG, ElementState::Released);
+        self.key_states.insert(KeyCode::KeyH, ElementState::Released);
+        self.key_states.insert(KeyCode::KeyI, ElementState::Released);
+        self.key_states.insert(KeyCode::KeyJ, ElementState::Released);
+        self.key_states.insert(KeyCode::KeyK, ElementState::Released);
+        self.key_states.insert(KeyCode::KeyL, ElementState::Released);
+        self.key_states.insert(KeyCode::KeyM, ElementState::Released);
+        self.key_states.insert(KeyCode::KeyN, ElementState::Released);
+        self.key_states.insert(KeyCode::KeyO, ElementState::Released);
+        self.key_states.insert(KeyCode::KeyP, ElementState::Released);
+        self.key_states.insert(KeyCode::KeyQ, ElementState::Released);
+        self.key_states.insert(KeyCode::KeyR, ElementState::Released);
+        self.key_states.insert(KeyCode::KeyS, ElementState::Released);
+        self.key_states.insert(KeyCode::KeyT, ElementState::Released);
+        self.key_states.insert(KeyCode::KeyU, ElementState::Released);
+        self.key_states.insert(KeyCode::KeyV, ElementState::Released);
+        self.key_states.insert(KeyCode::KeyW, ElementState::Released);
+        self.key_states.insert(KeyCode::KeyX, ElementState::Released);
+        self.key_states.insert(KeyCode::KeyY, ElementState::Released);
+        self.key_states.insert(KeyCode::KeyZ, ElementState::Released);
+        self.key_states.insert(KeyCode::Minus, ElementState::Released);
+        self.key_states.insert(KeyCode::Period, ElementState::Released);
+        self.key_states.insert(KeyCode::Quote, ElementState::Released);
+        self.key_states.insert(KeyCode::Semicolon, ElementState::Released);
+        self.key_states.insert(KeyCode::Slash, ElementState::Released);
+        self.key_states.insert(KeyCode::AltLeft, ElementState::Released);
+        self.key_states.insert(KeyCode::AltRight, ElementState::Released);
+        self.key_states.insert(KeyCode::Backspace, ElementState::Released);
+        self.key_states.insert(KeyCode::CapsLock, ElementState::Released);
+        self.key_states.insert(KeyCode::ContextMenu, ElementState::Released);
+        self.key_states.insert(KeyCode::ControlLeft, ElementState::Released);
+        self.key_states.insert(KeyCode::ControlRight, ElementState::Released);
+        self.key_states.insert(KeyCode::Enter, ElementState::Released);
+        self.key_states.insert(KeyCode::SuperLeft, ElementState::Released);
+        self.key_states.insert(KeyCode::SuperRight, ElementState::Released);
+        self.key_states.insert(KeyCode::ShiftLeft, ElementState::Released);
+        self.key_states.insert(KeyCode::ShiftRight, ElementState::Released);
+        self.key_states.insert(KeyCode::Space, ElementState::Released);
+        self.key_states.insert(KeyCode::Tab, ElementState::Released);
+        self.key_states.insert(KeyCode::Convert, ElementState::Released);
+        self.key_states.insert(KeyCode::KanaMode, ElementState::Released);
+        self.key_states.insert(KeyCode::Lang1, ElementState::Released);
+        self.key_states.insert(KeyCode::Lang2, ElementState::Released);
+        self.key_states.insert(KeyCode::Lang3, ElementState::Released);
+        self.key_states.insert(KeyCode::Lang4, ElementState::Released);
+        self.key_states.insert(KeyCode::Lang5, ElementState::Released);
+        self.key_states.insert(KeyCode::NonConvert, ElementState::Released);
+        self.key_states.insert(KeyCode::Delete, ElementState::Released);
+        self.key_states.insert(KeyCode::End, ElementState::Released);
+        self.key_states.insert(KeyCode::Help, ElementState::Released);
+        self.key_states.insert(KeyCode::Home, ElementState::Released);
+        self.key_states.insert(KeyCode::Insert, ElementState::Released);
+        self.key_states.insert(KeyCode::PageDown, ElementState::Released);
+        self.key_states.insert(KeyCode::PageUp, ElementState::Released);
+        self.key_states.insert(KeyCode::ArrowDown, ElementState::Released);
+        self.key_states.insert(KeyCode::ArrowLeft, ElementState::Released);
+        self.key_states.insert(KeyCode::ArrowRight, ElementState::Released);
+        self.key_states.insert(KeyCode::ArrowUp, ElementState::Released);
+        self.key_states.insert(KeyCode::NumLock, ElementState::Released);
+        self.key_states.insert(KeyCode::Numpad0, ElementState::Released);
+        self.key_states.insert(KeyCode::Numpad1, ElementState::Released);
+        self.key_states.insert(KeyCode::Numpad2, ElementState::Released);
+        self.key_states.insert(KeyCode::Numpad3, ElementState::Released);
+        self.key_states.insert(KeyCode::Numpad4, ElementState::Released);
+        self.key_states.insert(KeyCode::Numpad5, ElementState::Released);
+        self.key_states.insert(KeyCode::Numpad6, ElementState::Released);
+        self.key_states.insert(KeyCode::Numpad7, ElementState::Released);
+        self.key_states.insert(KeyCode::Numpad8, ElementState::Released);
+        self.key_states.insert(KeyCode::Numpad9, ElementState::Released);
+        self.key_states.insert(KeyCode::NumpadAdd, ElementState::Released);
+        self.key_states.insert(KeyCode::NumpadBackspace, ElementState::Released);
+        self.key_states.insert(KeyCode::NumpadClear, ElementState::Released);
+        self.key_states.insert(KeyCode::NumpadClearEntry, ElementState::Released);
+        self.key_states.insert(KeyCode::NumpadComma, ElementState::Released);
+        self.key_states.insert(KeyCode::NumpadDecimal, ElementState::Released);
+        self.key_states.insert(KeyCode::NumpadDivide, ElementState::Released);
+        self.key_states.insert(KeyCode::NumpadEnter, ElementState::Released);
+        self.key_states.insert(KeyCode::NumpadEqual, ElementState::Released);
+        self.key_states.insert(KeyCode::NumpadHash, ElementState::Released);
+        self.key_states.insert(KeyCode::NumpadMemoryAdd, ElementState::Released);
+        self.key_states.insert(KeyCode::NumpadMemoryClear, ElementState::Released);
+        self.key_states.insert(KeyCode::NumpadMemoryRecall, ElementState::Released);
+        self.key_states.insert(KeyCode::NumpadMemoryStore, ElementState::Released);
+        self.key_states.insert(KeyCode::NumpadMemorySubtract, ElementState::Released);
+        self.key_states.insert(KeyCode::NumpadMultiply, ElementState::Released);
+        self.key_states.insert(KeyCode::NumpadParenLeft, ElementState::Released);
+        self.key_states.insert(KeyCode::NumpadParenRight, ElementState::Released);
+        self.key_states.insert(KeyCode::NumpadStar, ElementState::Released);
+        self.key_states.insert(KeyCode::NumpadSubtract, ElementState::Released);
+        self.key_states.insert(KeyCode::Escape, ElementState::Released);
+        self.key_states.insert(KeyCode::Fn, ElementState::Released);
+        self.key_states.insert(KeyCode::FnLock, ElementState::Released);
+        self.key_states.insert(KeyCode::PrintScreen, ElementState::Released);
+        self.key_states.insert(KeyCode::ScrollLock, ElementState::Released);
+        self.key_states.insert(KeyCode::Pause, ElementState::Released);
+        self.key_states.insert(KeyCode::BrowserBack, ElementState::Released);
+        self.key_states.insert(KeyCode::BrowserFavorites, ElementState::Released);
+        self.key_states.insert(KeyCode::BrowserForward, ElementState::Released);
+        self.key_states.insert(KeyCode::BrowserHome, ElementState::Released);
+        self.key_states.insert(KeyCode::BrowserRefresh, ElementState::Released);
+        self.key_states.insert(KeyCode::BrowserSearch, ElementState::Released);
+        self.key_states.insert(KeyCode::BrowserStop, ElementState::Released);
+        self.key_states.insert(KeyCode::Eject, ElementState::Released);
+        self.key_states.insert(KeyCode::LaunchApp1, ElementState::Released);
+        self.key_states.insert(KeyCode::LaunchApp2, ElementState::Released);
+        self.key_states.insert(KeyCode::LaunchMail, ElementState::Released);
+        self.key_states.insert(KeyCode::MediaPlayPause, ElementState::Released);
+        self.key_states.insert(KeyCode::MediaSelect, ElementState::Released);
+        self.key_states.insert(KeyCode::MediaStop, ElementState::Released);
+        self.key_states.insert(KeyCode::MediaTrackNext, ElementState::Released);
+        self.key_states.insert(KeyCode::MediaTrackPrevious, ElementState::Released);
+        self.key_states.insert(KeyCode::Power, ElementState::Released);
+        self.key_states.insert(KeyCode::Sleep, ElementState::Released);
+        self.key_states.insert(KeyCode::AudioVolumeDown, ElementState::Released);
+        self.key_states.insert(KeyCode::AudioVolumeMute, ElementState::Released);
+        self.key_states.insert(KeyCode::AudioVolumeUp, ElementState::Released);
+        self.key_states.insert(KeyCode::WakeUp, ElementState::Released);
+        // Legacy modifier key. Also called "Super" in certain places.
+        self.key_states.insert(KeyCode::Meta, ElementState::Released);
+        // Legacy modifier key.
+        self.key_states.insert(KeyCode::Hyper, ElementState::Released);
+        self.key_states.insert(KeyCode::Turbo, ElementState::Released);
+        self.key_states.insert(KeyCode::Abort, ElementState::Released);
+        self.key_states.insert(KeyCode::Resume, ElementState::Released);
+        self.key_states.insert(KeyCode::Suspend, ElementState::Released);
+        self.key_states.insert(KeyCode::Again, ElementState::Released);
+        self.key_states.insert(KeyCode::Copy, ElementState::Released);
+        self.key_states.insert(KeyCode::Cut, ElementState::Released);
+        self.key_states.insert(KeyCode::Find, ElementState::Released);
+        self.key_states.insert(KeyCode::Open, ElementState::Released);
+        self.key_states.insert(KeyCode::Paste, ElementState::Released);
+        self.key_states.insert(KeyCode::Props, ElementState::Released);
+        self.key_states.insert(KeyCode::Select, ElementState::Released);
+        self.key_states.insert(KeyCode::Undo, ElementState::Released);
+        self.key_states.insert(KeyCode::Hiragana, ElementState::Released);
+        self.key_states.insert(KeyCode::Katakana, ElementState::Released);
+        self.key_states.insert(KeyCode::F1, ElementState::Released);
+        self.key_states.insert(KeyCode::F2, ElementState::Released);
+        self.key_states.insert(KeyCode::F3, ElementState::Released);
+        self.key_states.insert(KeyCode::F4, ElementState::Released);
+        self.key_states.insert(KeyCode::F5, ElementState::Released);
+        self.key_states.insert(KeyCode::F6, ElementState::Released);
+        self.key_states.insert(KeyCode::F7, ElementState::Released);
+        self.key_states.insert(KeyCode::F8, ElementState::Released);
+        self.key_states.insert(KeyCode::F9, ElementState::Released);
+        self.key_states.insert(KeyCode::F10, ElementState::Released);
+        self.key_states.insert(KeyCode::F11, ElementState::Released);
+        self.key_states.insert(KeyCode::F12, ElementState::Released);
+        self.key_states.insert(KeyCode::F13, ElementState::Released);
+        self.key_states.insert(KeyCode::F14, ElementState::Released);
+        self.key_states.insert(KeyCode::F15, ElementState::Released);
+        self.key_states.insert(KeyCode::F16, ElementState::Released);
+        self.key_states.insert(KeyCode::F17, ElementState::Released);
+        self.key_states.insert(KeyCode::F18, ElementState::Released);
+        self.key_states.insert(KeyCode::F19, ElementState::Released);
+        self.key_states.insert(KeyCode::F20, ElementState::Released);
+        self.key_states.insert(KeyCode::F21, ElementState::Released);
+        self.key_states.insert(KeyCode::F22, ElementState::Released);
+        self.key_states.insert(KeyCode::F23, ElementState::Released);
+        self.key_states.insert(KeyCode::F24, ElementState::Released);
+        self.key_states.insert(KeyCode::F25, ElementState::Released);
+        self.key_states.insert(KeyCode::F26, ElementState::Released);
+        self.key_states.insert(KeyCode::F27, ElementState::Released);
+        self.key_states.insert(KeyCode::F28, ElementState::Released);
+        self.key_states.insert(KeyCode::F29, ElementState::Released);
+        self.key_states.insert(KeyCode::F30, ElementState::Released);
+        self.key_states.insert(KeyCode::F31, ElementState::Released);
+        self.key_states.insert(KeyCode::F32, ElementState::Released);
+        self.key_states.insert(KeyCode::F33, ElementState::Released);
+        self.key_states.insert(KeyCode::F34, ElementState::Released);
+        self.key_states.insert(KeyCode::F35, ElementState::Released);
     }
 }
 

@@ -4,7 +4,7 @@ use rapier3d::na::{Isometry3, Matrix3, Matrix4, Point3, Rotation3};
 use std::f32::consts::FRAC_PI_2;
 use winit::{
     dpi::PhysicalPosition,
-    event::{ElementState, MouseScrollDelta, VirtualKeyCode},
+    event::{ElementState, MouseScrollDelta }, keyboard::KeyCode,
 };
 
 use crate::rendering::systems::general::Transform;
@@ -156,37 +156,37 @@ impl CameraController {
         }
     }
 
-    pub fn process_keyboard(&mut self, key: VirtualKeyCode, state: ElementState) -> bool {
+    pub fn process_keyboard(&mut self, key: KeyCode, state: ElementState) -> bool {
         let amount = if state == ElementState::Pressed {
             1.0
         } else {
             0.0
         };
-        if key == VirtualKeyCode::LShift && state == ElementState::Pressed {
+        if key == KeyCode::ShiftLeft && state == ElementState::Pressed {
             self.sprinting = !self.sprinting;
         }
         match key {
-            VirtualKeyCode::W | VirtualKeyCode::Up => {
+            KeyCode::KeyW | KeyCode::ArrowUp => {
                 self.amount_forward = amount;
                 true
             }
-            VirtualKeyCode::S | VirtualKeyCode::Down => {
+            KeyCode::KeyS | KeyCode::ArrowDown => {
                 self.amount_backward = amount;
                 true
             }
-            VirtualKeyCode::A | VirtualKeyCode::Left => {
+            KeyCode::KeyA | KeyCode::ArrowLeft => {
                 self.amount_left = amount;
                 true
             }
-            VirtualKeyCode::D | VirtualKeyCode::Right => {
+            KeyCode::KeyD | KeyCode::ArrowRight => {
                 self.amount_right = amount;
                 true
             }
-            VirtualKeyCode::Space => {
+            KeyCode::Space => {
                 self.amount_up = amount;
                 true
             }
-            VirtualKeyCode::LControl => {
+            KeyCode::ControlLeft => {
                 self.amount_down = amount;
                 true
             }

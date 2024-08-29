@@ -27,7 +27,7 @@ pub struct TargetFps(pub f32);
 #[derive(Default, EngineResource)]
 pub struct RenderManagerResource {
     pub adapter: Lateinit<Adapter>,
-    pub surface: Lateinit<Surface>,
+    pub surface: Lateinit<Surface<'static>>,
     pub device: Lateinit<Device>,
     pub queue: Lateinit<Queue>,
     pub config: Lateinit<SurfaceConfiguration>,

@@ -357,7 +357,7 @@ pub type EntityHashSet<T> = hashbrown::HashSet<T, EntityHash>;
 
 /// A specialized hashmap type with Key of [`TypeId`]
 /// Iteration order only depends on the order of insertions and deletions.
-pub type TypeIdMap<V> = hashbrown::HashMap<TypeId, V, NoOpHash>;
+pub type TypeIdMap<V> = hashbrown::HashMap<u128, V, NoOpHash>;
 
 /// [`BuildHasher`] for types that already contain a high-quality hash.
 #[derive(Clone, Default)]

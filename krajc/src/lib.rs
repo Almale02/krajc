@@ -106,8 +106,8 @@ use rendering::{
 
 use wgpu::{BufferUsages, ShaderModule, SurfaceError};
 use winit::{
-    dpi::PhysicalSize, event::*, event_loop::EventLoop,
-    platform::run_return::EventLoopExtRunReturn, window::WindowBuilder,
+    dpi::PhysicalSize, event::*, event_loop::EventLoop, keyboard::PhysicalKey,
+    platform::pump_events::EventLoopExtPumpEvents, window::WindowBuilder,
 };
 
 use crate::engine_runtime::schedule_manager::runtime_schedule::RuntimeEngineLoadSchedule;
@@ -401,7 +401,7 @@ pub async fn run(game: SystemPlugin) {
     let render_states = runtime.get_resource_mut::<RenderManagerResource>();
     let render = TypedAddr::new_with_ref(render_states);
 
-    let mut event_loop = EventLoop::new();
+    let mut event_loop = EventLoop::new().unwrap();
     let window = WindowBuilder::new()
         .with_inner_size(PhysicalSize::new(700, 700))
         .with_fullscreen(Some(winit::window::Fullscreen::Borderless(None)))
@@ -556,7 +556,6 @@ pub async fn run(game: SystemPlugin) {
             //println!("controller event: {:?} received from controller: {:?}, at time: {:?}", x.event, controller.gamepad(x.id).name(), x.time);
         }
         let mut events = Vec::new();
-        let mut scale_factor_changed: Option<PhysicalSize<u32>> = None;
         let frame_start = Instant::now();
         let dt = frame_start - last_render_time;
 
@@ -567,23 +566,15 @@ pub async fn run(game: SystemPlugin) {
             req.1();
             req.2(req.0, dupe(runtime))
         }
-        event_loop.run_return(|event, _, control_flow_event| match event {
+
+        event_loop.pump_events(None, |event, y| match event {
             Event::WindowEvent {
                 event: ref window_event,
                 ..
             } => match window_event {
-                WindowEvent::ScaleFactorChanged {
-                    scale_factor: _,
-                    new_inner_size,
-                } => scale_factor_changed = Some(**new_inner_size),
-                _ => events.push(event.to_static().unwrap()),
+                _ => events.push(event),
             },
-            Event::MainEventsCleared => {
-                control_flow_event.set_exit();
-
-                events.push(event.to_static().unwrap().clone())
-            }
-            _ => events.push(event.to_static().unwrap().clone()),
+            _ => events.push(event),
         });
 
         for event in events {
@@ -594,11 +585,13 @@ pub async fn run(game: SystemPlugin) {
                 } => {
                     mouse_input.mouse_motion = (delta.0 as f32, delta.1 as f32);
                 },
-                Event::DeviceEvent { event: DeviceEvent::Key(KeyboardInput { scancode: _, state, virtual_keycode, modifiers }), .. } => {
-                    if virtual_keycode.is_none() {
-                        break;
+                Event::DeviceEvent { event: DeviceEvent::Key(RawKeyEvent { physical_key, state }), .. } => {
+                    match physical_key {
+                        PhysicalKey::Code(code) => {
+                            key_input.register_input(code, state)
+                        },
+                        PhysicalKey::Unidentified(_) => (),
                     }
-                    key_input.register_input(virtual_keycode.unwrap(), state, modifiers);
                 },
                 Event::DeviceEvent { event: DeviceEvent::Button { button, state }, .. } => {
                     dbg!("yayayaaaaaaaaaaaaaaa");
@@ -610,7 +603,7 @@ pub async fn run(game: SystemPlugin) {
                 } if window_id == window_ref.id() => {
                     runtime.window_events(event);
                     match event {
-                        WindowEvent::CloseRequested | get_key_pressed!(VirtualKeyCode::Escape) => {
+                        WindowEvent::CloseRequested => {
                             should_run = false;
                         }
                         WindowEvent::Resized(size) => runtime.resize(*size),

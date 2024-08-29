@@ -750,7 +750,7 @@ impl Components {
 
     /// Type-erased equivalent of [`Components::component_id()`].
     #[inline]
-    pub fn get_id(&self, type_id: TypeId) -> Option<ComponentId> {
+    pub fn get_id(&self, type_id: u128) -> Option<ComponentId> {
         self.indices.get(&type_id).copied()
     }
 

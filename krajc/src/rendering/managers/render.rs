@@ -43,9 +43,10 @@ impl EngineRuntime {
         let output = state.surface.get_current_texture()?;
         //drop_span!(trace_get_surface_texture);
 
-        let view = output
-            .texture
-            .create_view(&TextureViewDescriptor::default());
+        let view = output.texture.create_view(&TextureViewDescriptor {
+            format: Some(TextureFormat::Rgba8UnormSrgb),
+            ..Default::default()
+        });
 
         let mut encoder = state
             .device

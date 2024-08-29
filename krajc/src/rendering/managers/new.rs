@@ -76,6 +76,10 @@ impl TextState {
 
 impl EngineRuntime {
     pub async fn init_rendering(&mut self, window: Window) {
+        let render_state = self.get_resource_mut::<RenderManagerResource>();
+
+        render_state.window.set(window);
+        let window = render_state.window.get_mut();
         let size = window.inner_size();
 
         // The instance is a handle to our GPU
@@ -85,7 +89,13 @@ impl EngineRuntime {
             ..Default::default()
         });
 
-        let surface = unsafe { instance.create_surface(&window) }.expect("failed");
+        let surface = instance
+            .create_surface(
+                self.get_resource_mut::<RenderManagerResource>()
+                    .window
+                    .get(),
+            )
+            .expect("failed");
 
         let adapter = instance
             .request_adapter(&RequestAdapterOptions {
@@ -109,8 +119,8 @@ impl EngineRuntime {
             match adapter
                 .request_device(
                     &wgpu::DeviceDescriptor {
-                        features,
-                        limits: first_limits,
+                        required_features: features,
+                        required_limits: first_limits,
                         label: None,
                     },
                     None,
@@ -121,8 +131,8 @@ impl EngineRuntime {
                 Err(_) => adapter
                     .request_device(
                         &wgpu::DeviceDescriptor {
-                            features: Features::default(),
-                            limits: second_limits,
+                            required_features: Features::default(),
+                            required_limits: second_limits,
 
                             label: None,
                         },
@@ -143,8 +153,6 @@ impl EngineRuntime {
         let point_light_count_uniform = IndexUniform::new(0);
         let spot_light_uniform: Vec<SpotLightUniform> = Vec::new();
         let spot_light_count_uniform = IndexUniform::new(0);
-
-        let render_state = self.get_resource_mut::<RenderManagerResource>();
 
         render_state.device.set(device);
         let device = &*render_state.device;
@@ -202,12 +210,13 @@ impl EngineRuntime {
             .unwrap_or(surface_caps.formats[0]);
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: surface_format,
+            format: TextureFormat::Rgba8UnormSrgb,
             width: size.width,
             height: size.height,
             present_mode: PresentMode::AutoNoVsync,
             alpha_mode: surface_caps.alpha_modes[0],
-            view_formats: vec![],
+            view_formats: vec![TextureFormat::Rgba8UnormSrgb],
+            desired_maximum_frame_latency: 2,
         };
 
         surface.configure(&device, &config);
@@ -229,7 +238,6 @@ impl EngineRuntime {
 
         let depth_texture = Texture::create_depth_texture(device, &config, "Depth Texture");
 
-        render_state.window.set(window);
         render_state.surface.set(surface);
         render_state.queue.set(queue);
         render_state.config.set(config);
