@@ -7,6 +7,7 @@ use crate::{
     world::DeferredWorld,
 };
 use bevy_ptr::PtrMut;
+use krajc_macros::Uuid;
 
 /// Contains [`Observer`] information. This defines how a given observer behaves. It is the
 /// "source of truth" for a given observer entity's behavior.
@@ -260,6 +261,7 @@ pub type ObserverRunner = fn(DeferredWorld, ObserverTrigger, PtrMut);
 /// serves as the "source of truth" of the observer.
 ///
 /// [`SystemParam`]: crate::system::SystemParam
+#[derive(Uuid)]
 pub struct Observer<T: 'static, B: Bundle> {
     system: BoxedObserverSystem<T, B>,
     descriptor: ObserverDescriptor,

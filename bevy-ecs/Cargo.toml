@@ -25,6 +25,7 @@ bevy_utils = { path = "../bevy-deps/bevy_utils", version = "0.15.0-dev" }
 bevy_ecs_macros = { path = "macros", version = "0.15.0-dev" }
 
 shared-lib = {path = "../shared-lib"}
+krajc_macros = { path = "../krajc_macros" }
 
 
 petgraph = "0.6"

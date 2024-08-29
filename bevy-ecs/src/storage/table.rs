@@ -915,6 +915,9 @@ impl IndexMut<TableId> for Tables {
 
 #[cfg(test)]
 mod tests {
+    use bevy_ecs_macros::ComponentNoUuid;
+    use krajc_macros::Uuid;
+
     use crate as bevy_ecs;
     use crate::component::Component;
     use crate::ptr::OwningPtr;
@@ -924,7 +927,7 @@ mod tests {
         entity::Entity,
         storage::{TableBuilder, TableRow},
     };
-    #[derive(Component)]
+    #[derive(ComponentNoUuid, Uuid)]
     struct W<T>(T);
 
     #[test]

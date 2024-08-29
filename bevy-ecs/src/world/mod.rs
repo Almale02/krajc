@@ -1248,7 +1248,7 @@ impl World {
     /// since the last call to [`World::clear_trackers`].
     pub fn removed<T: Component>(&self) -> impl Iterator<Item = Entity> + '_ {
         self.components
-            .get_id(TypeId::of::<T>())
+            .get_id(T::uuid())
             .map(|component_id| self.removed_with_id(component_id))
             .into_iter()
             .flatten()

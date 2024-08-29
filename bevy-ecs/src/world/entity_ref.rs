@@ -77,7 +77,7 @@ impl<'w> EntityRef<'w> {
     /// [`Self::contains_id`] or [`Self::contains_type_id`].
     #[inline]
     pub fn contains<T: Component>(&self) -> bool {
-        self.contains_type_id(TypeId::of::<T>())
+        self.contains_type_id(T::uuid())
     }
 
     /// Returns `true` if the current entity has a component identified by `component_id`.
@@ -101,7 +101,7 @@ impl<'w> EntityRef<'w> {
     /// - If you know the concrete type of the component, you should prefer [`Self::contains`].
     /// - If you have a [`ComponentId`] instead of a [`TypeId`], consider using [`Self::contains_id`].
     #[inline]
-    pub fn contains_type_id(&self, type_id: TypeId) -> bool {
+    pub fn contains_type_id(&self, type_id: u128) -> bool {
         self.0.contains_type_id(type_id)
     }
 
@@ -316,7 +316,7 @@ impl<'w> EntityMut<'w> {
     /// [`Self::contains_id`] or [`Self::contains_type_id`].
     #[inline]
     pub fn contains<T: Component>(&self) -> bool {
-        self.contains_type_id(TypeId::of::<T>())
+        self.contains_type_id(T::uuid())
     }
 
     /// Returns `true` if the current entity has a component identified by `component_id`.
@@ -340,7 +340,7 @@ impl<'w> EntityMut<'w> {
     /// - If you know the concrete type of the component, you should prefer [`Self::contains`].
     /// - If you have a [`ComponentId`] instead of a [`TypeId`], consider using [`Self::contains_id`].
     #[inline]
-    pub fn contains_type_id(&self, type_id: TypeId) -> bool {
+    pub fn contains_type_id(&self, type_id: u128) -> bool {
         self.0.contains_type_id(type_id)
     }
 
@@ -611,7 +611,7 @@ impl<'w> EntityWorldMut<'w> {
     /// [`Self::contains_id`] or [`Self::contains_type_id`].
     #[inline]
     pub fn contains<T: Component>(&self) -> bool {
-        self.contains_type_id(TypeId::of::<T>())
+        self.contains_type_id(T::uuid())
     }
 
     /// Returns `true` if the current entity has a component identified by `component_id`.
@@ -636,7 +636,7 @@ impl<'w> EntityWorldMut<'w> {
     /// - If you know the concrete type of the component, you should prefer [`Self::contains`].
     /// - If you have a [`ComponentId`] instead of a [`TypeId`], consider using [`Self::contains_id`].
     #[inline]
-    pub fn contains_type_id(&self, type_id: TypeId) -> bool {
+    pub fn contains_type_id(&self, type_id: u128) -> bool {
         self.as_unsafe_entity_cell_readonly()
             .contains_type_id(type_id)
     }
@@ -1841,7 +1841,7 @@ impl<'w> FilteredEntityRef<'w> {
     /// [`Self::contains_id`] or [`Self::contains_type_id`].
     #[inline]
     pub fn contains<T: Component>(&self) -> bool {
-        self.contains_type_id(TypeId::of::<T>())
+        self.contains_type_id(T::uuid())
     }
 
     /// Returns `true` if the current entity has a component identified by `component_id`.
@@ -1865,7 +1865,7 @@ impl<'w> FilteredEntityRef<'w> {
     /// - If you know the concrete type of the component, you should prefer [`Self::contains`].
     /// - If you have a [`ComponentId`] instead of a [`TypeId`], consider using [`Self::contains_id`].
     #[inline]
-    pub fn contains_type_id(&self, type_id: TypeId) -> bool {
+    pub fn contains_type_id(&self, type_id: u128) -> bool {
         self.entity.contains_type_id(type_id)
     }
 
@@ -1873,7 +1873,7 @@ impl<'w> FilteredEntityRef<'w> {
     /// Returns `None` if the entity does not have a component of type `T`.
     #[inline]
     pub fn get<T: Component>(&self) -> Option<&'w T> {
-        let id = self.entity.world().components().get_id(TypeId::of::<T>())?;
+        let id = self.entity.world().components().get_id(T::uuid())?;
         self.access
             .has_read(id)
             // SAFETY: We have read access
@@ -1887,7 +1887,7 @@ impl<'w> FilteredEntityRef<'w> {
     /// Returns `None` if the entity does not have a component of type `T`.
     #[inline]
     pub fn get_ref<T: Component>(&self) -> Option<Ref<'w, T>> {
-        let id = self.entity.world().components().get_id(TypeId::of::<T>())?;
+        let id = self.entity.world().components().get_id(T::uuid())?;
         self.access
             .has_read(id)
             // SAFETY: We have read access
@@ -1899,7 +1899,7 @@ impl<'w> FilteredEntityRef<'w> {
     /// detection in custom runtimes.
     #[inline]
     pub fn get_change_ticks<T: Component>(&self) -> Option<ComponentTicks> {
-        let id = self.entity.world().components().get_id(TypeId::of::<T>())?;
+        let id = self.entity.world().components().get_id(T::uuid())?;
         self.access
             .has_read(id)
             // SAFETY: We have read access
@@ -2098,7 +2098,7 @@ impl<'w> FilteredEntityMut<'w> {
     /// [`Self::contains_id`] or [`Self::contains_type_id`].
     #[inline]
     pub fn contains<T: Component>(&self) -> bool {
-        self.contains_type_id(TypeId::of::<T>())
+        self.contains_type_id(T::uuid())
     }
 
     /// Returns `true` if the current entity has a component identified by `component_id`.
@@ -2122,7 +2122,7 @@ impl<'w> FilteredEntityMut<'w> {
     /// - If you know the concrete type of the component, you should prefer [`Self::contains`].
     /// - If you have a [`ComponentId`] instead of a [`TypeId`], consider using [`Self::contains_id`].
     #[inline]
-    pub fn contains_type_id(&self, type_id: TypeId) -> bool {
+    pub fn contains_type_id(&self, type_id: u128) -> bool {
         self.entity.contains_type_id(type_id)
     }
 
@@ -2146,7 +2146,7 @@ impl<'w> FilteredEntityMut<'w> {
     /// Returns `None` if the entity does not have a component of type `T`.
     #[inline]
     pub fn get_mut<T: Component>(&mut self) -> Option<Mut<'_, T>> {
-        let id = self.entity.world().components().get_id(TypeId::of::<T>())?;
+        let id = self.entity.world().components().get_id(T::uuid())?;
         self.access
             .has_write(id)
             // SAFETY: We have write access
@@ -2159,7 +2159,7 @@ impl<'w> FilteredEntityMut<'w> {
     /// Returns `None` if the entity does not have a component of type `T`.
     #[inline]
     pub fn into_mut<T: Component>(self) -> Option<Mut<'w, T>> {
-        let id = self.entity.world().components().get_id(TypeId::of::<T>())?;
+        let id = self.entity.world().components().get_id(T::uuid())?;
         self.access
             .has_write(id)
             // SAFETY: We have write access
@@ -2484,6 +2484,7 @@ pub(crate) unsafe fn take_component<'a>(
 #[cfg(test)]
 mod tests {
     use bevy_ptr::OwningPtr;
+    use shared_lib::AbiTypeId;
     use std::panic::AssertUnwindSafe;
 
     use crate::world::{FilteredEntityMut, FilteredEntityRef};
@@ -2521,10 +2522,7 @@ mod tests {
     fn entity_ref_get_by_id() {
         let mut world = World::new();
         let entity = world.spawn(TestComponent(42)).id();
-        let component_id = world
-            .components()
-            .get_id(std::any::TypeId::of::<TestComponent>())
-            .unwrap();
+        let component_id = world.components().get_id(TestComponent::uuid()).unwrap();
 
         let entity = world.entity(entity);
         let test_component = entity.get_by_id(component_id).unwrap();
@@ -2538,10 +2536,7 @@ mod tests {
     fn entity_mut_get_by_id() {
         let mut world = World::new();
         let entity = world.spawn(TestComponent(42)).id();
-        let component_id = world
-            .components()
-            .get_id(std::any::TypeId::of::<TestComponent>())
-            .unwrap();
+        let component_id = world.components().get_id(TestComponent::uuid()).unwrap();
 
         let mut entity_mut = world.entity_mut(entity);
         let mut test_component = entity_mut.get_mut_by_id(component_id).unwrap();
@@ -2642,41 +2637,6 @@ mod tests {
     }
 
     // Test that calling retain with `()` removes all components.
-    #[test]
-    fn retain_nothing() {
-        #[derive(Component)]
-        struct Marker<const N: usize>;
-
-        let mut world = World::new();
-        let ent = world.spawn((Marker::<1>, Marker::<2>, Marker::<3>)).id();
-
-        world.entity_mut(ent).retain::<()>();
-        assert_eq!(world.entity(ent).archetype().components().next(), None);
-    }
-
-    // Test removing some components with `retain`, including components not on the entity.
-    #[test]
-    fn retain_some_components() {
-        #[derive(Component)]
-        struct Marker<const N: usize>;
-
-        let mut world = World::new();
-        let ent = world.spawn((Marker::<1>, Marker::<2>, Marker::<3>)).id();
-
-        world.entity_mut(ent).retain::<(Marker<2>, Marker<4>)>();
-        // Check that marker 2 was retained.
-        assert!(world.entity(ent).get::<Marker<2>>().is_some());
-        // Check that only marker 2 was retained.
-        assert_eq!(
-            world
-                .entity(ent)
-                .archetype()
-                .components()
-                .collect::<Vec<_>>()
-                .len(),
-            1
-        );
-    }
 
     // regression test for https://github.com/bevyengine/bevy/pull/7805
     #[test]

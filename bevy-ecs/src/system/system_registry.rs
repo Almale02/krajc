@@ -2,11 +2,11 @@ use crate::entity::Entity;
 use crate::system::{BoxedSystem, IntoSystem};
 use crate::world::{Command, World};
 use crate::{self as bevy_ecs};
-use bevy_ecs_macros::Component;
+use bevy_ecs_macros::{Component, ComponentNoUuid};
+use krajc_macros::Uuid;
 use thiserror::Error;
 
-/// A small wrapper for [`BoxedSystem`] that also keeps track whether or not the system has been initialized.
-#[derive(Component)]
+#[derive(ComponentNoUuid, Uuid)]
 struct RegisteredSystem<I, O> {
     initialized: bool,
     system: BoxedSystem<I, O>,

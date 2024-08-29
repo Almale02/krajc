@@ -1328,6 +1328,10 @@ fn observe<E: Event, B: Bundle, M>(
 #[cfg(test)]
 #[allow(clippy::float_cmp, clippy::approx_constant)]
 mod tests {
+    use bevy_ecs_macros::ComponentNoUuid;
+    use krajc_macros::Uuid;
+    use shared_lib::AbiTypeId;
+
     use crate::{
         self as bevy_ecs,
         component::Component,
@@ -1362,7 +1366,7 @@ mod tests {
         }
     }
 
-    #[derive(Component, Resource)]
+    #[derive(ComponentNoUuid, Uuid, Resource)]
     struct W<T>(T);
 
     fn simple_command(world: &mut World) {
@@ -1489,15 +1493,10 @@ mod tests {
         // test component removal
         Commands::new(&mut command_queue, &world)
             .entity(entity)
-            .remove_by_id(world.components().get_id(TypeId::of::<W<u32>>()).unwrap())
-            .remove_by_id(world.components().get_id(TypeId::of::<W<u64>>()).unwrap())
-            .remove_by_id(world.components().get_id(TypeId::of::<DropCk>()).unwrap())
-            .remove_by_id(
-                world
-                    .components()
-                    .get_id(TypeId::of::<SparseDropCk>())
-                    .unwrap(),
-            );
+            .remove_by_id(world.components().get_id(<W<u32>>::uuid()).unwrap())
+            .remove_by_id(world.components().get_id(<W<u64>>::uuid()).unwrap())
+            .remove_by_id(world.components().get_id(<DropCk>::uuid()).unwrap())
+            .remove_by_id(world.components().get_id(SparseDropCk::uuid()).unwrap());
 
         assert_eq!(dense_is_dropped.load(Ordering::Relaxed), 0);
         assert_eq!(sparse_is_dropped.load(Ordering::Relaxed), 0);

@@ -11,6 +11,9 @@
 #[cfg(target_pointer_width = "16")]
 compile_error!("bevy_ecs cannot safely compile for a 16-bit platform.");
 
+use krajc_macros::impl_uuid;
+use shared_lib::prelude::*;
+
 pub mod archetype;
 pub mod batching;
 pub mod bundle;
@@ -49,7 +52,7 @@ pub mod prelude {
         event::{Event, EventMutator, EventReader, EventWriter, Events},
         observer::{Observer, Trigger},
         query::{Added, AnyOf, Changed, Has, Or, QueryBuilder, QueryState, With, Without},
-        remtval_detection::RemovedComponents,
+        removal_detection::RemovedComponents,
         schedule::{
             apply_deferred, common_conditions::*, Condition, IntoSystemConfigs, IntoSystemSet,
             IntoSystemSetConfigs, Schedule, Schedules, SystemSet,
@@ -79,6 +82,8 @@ mod tests {
         world::{EntityRef, Mut, World},
     };
     use bevy_tasks::{ComputeTaskPool, TaskPool};
+    use krajc_macros::impl_uuid;
+    use shared_lib::AbiTypeId;
     use std::num::NonZeroU32;
     use std::{
         any::TypeId,
@@ -1387,8 +1392,8 @@ mod tests {
         let query = world.query_filtered::<&mut A, Changed<B>>();
 
         let mut expected = FilteredAccess::<ComponentId>::default();
-        let a_id = world.components.get_id(TypeId::of::<A>()).unwrap();
-        let b_id = world.components.get_id(TypeId::of::<B>()).unwrap();
+        let a_id = world.components.get_id(A::uuid()).unwrap();
+        let b_id = world.components.get_id(B::uuid()).unwrap();
         expected.add_write(a_id);
         expected.add_read(b_id);
         assert!(

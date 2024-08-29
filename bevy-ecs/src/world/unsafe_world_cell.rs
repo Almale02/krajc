@@ -652,7 +652,7 @@ impl<'w> UnsafeEntityCell<'w> {
     /// [`Self::contains_id`] or [`Self::contains_type_id`].
     #[inline]
     pub fn contains<T: Component>(self) -> bool {
-        self.contains_type_id(TypeId::of::<T>())
+        self.contains_type_id(T::uuid())
     }
 
     /// Returns `true` if the current entity has a component identified by `component_id`.
@@ -689,7 +689,7 @@ impl<'w> UnsafeEntityCell<'w> {
     /// - no other mutable references to the component exist at the same time
     #[inline]
     pub unsafe fn get<T: Component>(self) -> Option<&'w T> {
-        let component_id = self.world.components().get_id(TypeId::of::<T>())?;
+        let component_id = self.world.components().get_id(T::uuid())?;
         // SAFETY:
         // - `storage_type` is correct (T component_id + T::STORAGE_TYPE)
         // - `location` is valid
@@ -715,7 +715,7 @@ impl<'w> UnsafeEntityCell<'w> {
     pub unsafe fn get_ref<T: Component>(self) -> Option<Ref<'w, T>> {
         let last_change_tick = self.world.last_change_tick();
         let change_tick = self.world.change_tick();
-        let component_id = self.world.components().get_id(TypeId::of::<T>())?;
+        let component_id = self.world.components().get_id(T::uuid())?;
 
         // SAFETY:
         // - `storage_type` is correct (T component_id + T::STORAGE_TYPE)
@@ -746,7 +746,7 @@ impl<'w> UnsafeEntityCell<'w> {
     /// - no other mutable references to the component exist at the same time
     #[inline]
     pub unsafe fn get_change_ticks<T: Component>(self) -> Option<ComponentTicks> {
-        let component_id = self.world.components().get_id(TypeId::of::<T>())?;
+        let component_id = self.world.components().get_id(T::uuid())?;
 
         // SAFETY:
         // - entity location is valid
@@ -814,7 +814,7 @@ impl<'w> UnsafeEntityCell<'w> {
         last_change_tick: Tick,
         change_tick: Tick,
     ) -> Option<Mut<'w, T>> {
-        let component_id = self.world.components().get_id(TypeId::of::<T>())?;
+        let component_id = self.world.components().get_id(T::uuid())?;
 
         // SAFETY:
         // - `storage_type` is correct

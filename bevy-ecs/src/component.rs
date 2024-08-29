@@ -13,7 +13,8 @@ pub use bevy_ecs_macros::Component;
 use bevy_ptr::{OwningPtr, UnsafeCellDeref};
 #[cfg(feature = "bevy_reflect")]
 use bevy_reflect::Reflect;
-use bevy_utils::TypeIdMap;
+use bevy_utils::{AbiTypeIdMap, TypeIdMap};
+use shared_lib::AbiTypeId;
 use std::cell::UnsafeCell;
 use std::{
     alloc::Layout,
@@ -191,7 +192,7 @@ use std::{
     label = "invalid `Component`",
     note = "consider annotating `{Self}` with `#[derive(Component)]`"
 )]
-pub trait Component: Send + Sync + 'static {
+pub trait Component: AbiTypeId + Send + Sync + 'static {
     /// A constant indicating the storage type used for this component.
     const STORAGE_TYPE: StorageType;
 
@@ -637,7 +638,7 @@ impl ComponentDescriptor {
 #[derive(Debug, Default)]
 pub struct Components {
     components: Vec<ComponentInfo>,
-    indices: TypeIdMap<ComponentId>,
+    indices: AbiTypeIdMap<ComponentId>,
     resource_indices: TypeIdMap<ComponentId>,
 }
 
@@ -652,7 +653,7 @@ impl Components {
     /// * [`Components::init_component_with_descriptor()`]
     #[inline]
     pub fn init_component<T: Component>(&mut self, storages: &mut Storages) -> ComponentId {
-        let type_id = TypeId::of::<T>();
+        let type_id = T::uuid();
 
         let Components {
             indices,
@@ -783,7 +784,7 @@ impl Components {
     /// * [`World::component_id()`]
     #[inline]
     pub fn component_id<T: Component>(&self) -> Option<ComponentId> {
-        self.get_id(TypeId::of::<T>())
+        self.get_id(T::uuid())
     }
 
     /// Type-erased equivalent of [`Components::resource_id()`].

@@ -342,7 +342,10 @@ impl<T> std::ops::DerefMut for In<T> {
 mod tests {
     use std::any::TypeId;
 
+    use bevy_ecs_macros::ComponentNoUuid;
     use bevy_utils::default;
+    use krajc_macros::Uuid;
+    use shared_lib::AbiTypeId;
 
     use crate::{
         self as bevy_ecs,
@@ -384,7 +387,7 @@ mod tests {
     #[derive(Component, Resource)]
     struct F;
 
-    #[derive(Component, Debug)]
+    #[derive(ComponentNoUuid, Uuid, Debug)]
     struct W<T>(T);
 
     #[test]
@@ -1092,7 +1095,7 @@ mod tests {
             .components()
             .get_resource_id(TypeId::of::<B>())
             .unwrap();
-        let d_id = world.components().get_id(TypeId::of::<D>()).unwrap();
+        let d_id = world.components().get_id(D::uuid()).unwrap();
         assert_eq!(conflicts, vec![b_id, d_id]);
     }
 

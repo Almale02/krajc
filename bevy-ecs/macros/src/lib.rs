@@ -531,6 +531,10 @@ pub fn derive_resource(input: TokenStream) -> TokenStream {
 pub fn derive_component(input: TokenStream) -> TokenStream {
     component::derive_component(input)
 }
+#[proc_macro_derive(ComponentNoUuid, attributes(component))]
+pub fn derive_component_no_uuid(input: TokenStream) -> TokenStream {
+    component::derive_component_no_uuid(input)
+}
 
 #[proc_macro_derive(States)]
 pub fn derive_states(input: TokenStream) -> TokenStream {

@@ -16,6 +16,7 @@ pub fn derive_event(input: TokenStream) -> TokenStream {
     let (impl_generics, type_generics, where_clause) = &ast.generics.split_for_impl();
 
     TokenStream::from(quote! {
+        crate::impl_uuid!(#struct_name);
         impl #impl_generics #bevy_ecs_path::event::Event for #struct_name #type_generics #where_clause {
         }
 
@@ -44,6 +45,43 @@ pub fn derive_resource(input: TokenStream) -> TokenStream {
 }
 
 pub fn derive_component(input: TokenStream) -> TokenStream {
+    let mut ast = parse_macro_input!(input as DeriveInput);
+    let bevy_ecs_path: Path = crate::bevy_ecs_path();
+
+    let attrs = match parse_component_attr(&ast) {
+        Ok(attrs) => attrs,
+        Err(e) => return e.into_compile_error().into(),
+    };
+
+    let storage = storage_path(&bevy_ecs_path, attrs.storage);
+
+    let on_add = hook_register_function_call(quote! {on_add}, attrs.on_add);
+    let on_insert = hook_register_function_call(quote! {on_insert}, attrs.on_insert);
+    let on_remove = hook_register_function_call(quote! {on_remove}, attrs.on_remove);
+
+    ast.generics
+        .make_where_clause()
+        .predicates
+        .push(parse_quote! { Self: Send + Sync + 'static });
+
+    let struct_name = &ast.ident;
+    let (impl_generics, type_generics, where_clause) = &ast.generics.split_for_impl();
+
+    TokenStream::from(quote! {
+        crate::impl_uuid!(#struct_name);
+        impl #impl_generics #bevy_ecs_path::component::Component for #struct_name #type_generics #where_clause {
+            const STORAGE_TYPE: #bevy_ecs_path::component::StorageType = #storage;
+
+            #[allow(unused_variables)]
+            fn register_component_hooks(hooks: &mut #bevy_ecs_path::component::ComponentHooks) {
+                #on_add
+                #on_insert
+                #on_remove
+            }
+        }
+    })
+}
+pub fn derive_component_no_uuid(input: TokenStream) -> TokenStream {
     let mut ast = parse_macro_input!(input as DeriveInput);
     let bevy_ecs_path: Path = crate::bevy_ecs_path();
 
