@@ -1,0 +1,23 @@
+.{
+    .name = "mach-gpu",
+    .version = "0.2.0",
+    .paths = .{
+        "examples",
+        "src",
+        "build.zig",
+        "build.zig.zon",
+        "LICENSE",
+        "LICENSE-APACHE",
+        "LICENSE-MIT",
+        "README.md",
+    },
+    .dependencies = .{
+        .mach_glfw = .{
+            .path = "../krajc-glfw",
+        },
+        .mach_gpu_dawn = .{
+            .url = "https://pkg.machengine.org/mach-gpu-dawn/d0a1e11ac96401108ba7c35bf99101c0756ded2d.tar.gz",
+            .hash = "122060fbe61aa4a828002ca8949d9c3ef1b6b7ae3fa92558af7ccea7182e8d9d516c",
+        },
+    },
+}
