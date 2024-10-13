@@ -48,6 +48,7 @@ pub fn build(b: *std.Build) void {
     b.installArtifact(exe);
 
     try link(b, exe, &exe.root_module, .{ .gpu_dawn_options = gpu_dawn_options });
+    try link(b, lib, &exe.root_module, .{ .gpu_dawn_options = gpu_dawn_options });
 
     //exe.root_module.addImport("ziglangSet", ziglangSet.module("ziglangSet"));
 
@@ -81,7 +82,9 @@ pub fn build(b: *std.Build) void {
     lib.root_module.addImport("zm", zm_dep.module("zm"));
 
     exe.addCSourceFile(.{ .file = b.path("../krajc-wgpu/src/mach_dawn.cpp"), .flags = &.{"-std=c++17"} });
+    lib.addCSourceFile(.{ .file = b.path("../krajc-wgpu/src/mach_dawn.cpp"), .flags = &.{"-std=c++17"} });
     exe.addIncludePath(b.path("../krajc-wgpu/src"));
+    lib.addIncludePath(b.path("../krajc-wgpu/src"));
 
     // This *creates* a Run step in the build graph, to be executed when another
     // step is evaluated that depends on it. The next line below will establish

@@ -66,8 +66,11 @@ pub fn AssetHandle(T: type) type {
         id: uuid.Uuid,
         const Self = @This();
         pub fn get(self: *const Self) *T {
-            const ptr: *T = @ptrCast(@alignCast(self.asset_manager.entries.getPtr(self.id).?.*.ptr));
+            const ptr: *T = @ptrCast(@alignCast(self.asset_manager.entries.get(self.id).?.ptr));
             return ptr;
+        }
+        pub fn get_copy(self: *const Self) T {
+            self.asset_manager.entries.get(self.id).?.ptr.*;
         }
         pub fn is_loaded(self: *const Self) bool {
             return self.asset_manager.entries.getPtr(self.id).?.loaded;

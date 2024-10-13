@@ -93,22 +93,29 @@ pub fn main() !void {
     try @import("rendering/data/rendering_state.zig").init_wgpu(window, rendering_state);
 
     const asset_loading_thread = std.Thread.spawn(.{}, AssetManager.run, .{asset_manager}) catch unreachable;
-    defer asset_loading_thread.join();
+    _ = asset_loading_thread;
+    //defer asset_loading_thread.join();
 
     var asset = FileLoader.start(asset_manager, "file.txt");
     defer asset.deinit();
-    std.time.sleep(std.time.ns_per_ms * 900);
+    std.time.sleep(std.time.ns_per_ms * 2900);
+    const loaded = asset.handle.is_loaded();
     const data = asset.handle.get().*.*;
+    //_ = data;
     // not deadlock
     std.debug.print("ads", .{});
     // deadlock
-    std.debug.print("{any}", .{data});
+    if (loaded) {
+        //std.log.info("{}", .{data.ptr[0]});
+        std.debug.print("{}", .{data.len});
+        //std.debug.print("{any}", .{data});
+    }
 
     //std.debug.print("data is: {s}", .{data});
 
     while (!window.shouldClose()) {
-        const loaded = asset.handle.is_loaded();
-        std.debug.print("loaded: {}\n", .{loaded});
+        //const loaded = asset.handle.is_loaded();
+        //std.debug.print("loaded: {}\n", .{loaded});
 
         //std.debug.print("--------------\n", .{});
         key_input.step_frame();
