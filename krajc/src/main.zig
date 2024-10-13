@@ -102,7 +102,7 @@ pub fn main() !void {
     // not deadlock
     std.debug.print("ads", .{});
     // deadlock
-    std.debug.print("{s}", .{data});
+    std.debug.print("{any}", .{data});
 
     //std.debug.print("data is: {s}", .{data});
 
