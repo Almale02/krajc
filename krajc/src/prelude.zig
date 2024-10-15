@@ -2,6 +2,7 @@ pub const main = @import("main.zig");
 pub const utils = @import("utils.zig");
 pub const ecs = @import("ecs/prelude.zig");
 pub const rendering = @import("rendering/prelude.zig");
+const file_loader = @import("rendering/asset_loaders/file_loader.zig");
 
 pub const RenderingState = rendering.RenderingState;
 pub const ResourceState = main.ResourceState;
@@ -37,3 +38,10 @@ pub const Or = ecs.Or;
 pub const Not = ecs.Not;
 //
 pub const Tick = ecs.Tick;
+//
+pub const AssetManager = main.AssetManager;
+pub const AssetHandle = main.AssetHandle;
+pub const AssetLoader = @import("engine_state/asset_manager.zig").AssetLoader;
+pub const IAssetLoader = @import("engine_state/asset_manager.zig").IAssetLoader;
+pub const FileLoader = file_loader.FileLoader;
+pub const ShaderLoader = file_loader.ShaderLoader;

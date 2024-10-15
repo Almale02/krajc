@@ -73,9 +73,13 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("hashset", hashset_dep.module("ziglangSet"));
     lib.root_module.addImport("hashset", hashset_dep.module("ziglangSet"));
 
-    const krajc_dep = b.dependency("krajc_ecs", .{});
-    exe.root_module.addImport("krajc_ecs", krajc_dep.module("ecs"));
-    lib.root_module.addImport("krajc_ecs", krajc_dep.module("ecs"));
+    const krajc_ecs_dep = b.dependency("krajc_ecs", .{});
+    exe.root_module.addImport("krajc_ecs", krajc_ecs_dep.module("ecs"));
+    lib.root_module.addImport("krajc_ecs", krajc_ecs_dep.module("ecs"));
+
+    const utils_dep = b.dependency("utils", .{});
+    exe.root_module.addImport("utils", utils_dep.module("utils"));
+    lib.root_module.addImport("utils", utils_dep.module("utils"));
 
     const zm_dep = b.dependency("zm", .{});
     exe.root_module.addImport("zm", zm_dep.module("zm"));

@@ -57,6 +57,7 @@
             .hash = "12209dd760f072d27f477048b1ad336a9b16774a38db7cb6429151c793a5fd1a79a2"
         },
         .zchan = .{ .path = "../zchan/" },
+        .utils = .{ .path = "../utils/" },
         .krajc_wgpu = .{ .path = "../krajc-wgpu/" },
         .krajc_glfw = .{ .path = "../krajc-glfw/" },
         .krajc_ecs = .{ .path = "../ecs/" },

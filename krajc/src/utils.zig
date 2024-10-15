@@ -2,131 +2,14 @@ const std = @import("std");
 const wgpu = @import("wgpu");
 const glfw = @import("glfw");
 const objc = @import("objc_message.zig");
-pub const TypeId = u64;
-
-pub fn get_random() std.Random {
-    var prng = std.rand.DefaultPrng.init(@intCast(std.time.milliTimestamp()));
-    return prng.random();
-}
-pub fn get_random_seed(seed: comptime_int) std.Random {
-    var prng = std.rand.DefaultPrng.init(@intCast(seed));
-    return prng.random();
-}
-//pub fn type_id(comptime T: type) TypeId {
-//comptime {
-//const H = struct {
-//var byte: u8 = 0;
-//var _ = T;
-//};
-//return @intFromPtr(&H.byte);
-//}
-//}
-
-fn comptimeHash(str: []const u8) u64 {
-    var hash: u64 = 5381;
-    for (str) |c| {
-        const casted_int: u64 = @intCast(c);
-        const multiplied = @mulWithOverflow(hash, 33)[0];
-        const added = @addWithOverflow(multiplied, casted_int)[0];
-        hash = added;
-    }
-    return hash;
-}
-
-pub fn type_id(comptime T: type) TypeId {
-    return comptimeHash(@typeName(T));
-}
-pub fn accessMethod(comptime T: type, name: []const u8, comptime Func: type) ?Func {
-    comptime {
-        if (ensureContainsMethod(T, name, Func)) {
-            return @field(T, name);
-        }
-        return null;
-    }
-}
-
-pub fn ensureContainsMethod(comptime on_type: type, comptime name: []const u8, comptime func: type) bool {
-    comptime {
-        const funcInfo = @typeInfo(func);
-        if (funcInfo != .Fn) {
-            @compileError("`func` must be a function declaration or function pointer");
-        }
-
-        const funcName = name;
-        const funcParams = funcInfo.Fn.params;
-        const funcReturnType = funcInfo.Fn.return_type;
-
-        const typeInfo = @typeInfo(on_type);
-        if (typeInfo != .Struct) {
-            return false;
-        }
-
-        // Check if the struct has the method
-        const hasMethod = @hasDecl(on_type, funcName);
-        if (!hasMethod) {
-            return false;
-        }
-
-        // Retrieve the method's type info
-        const method = @field(on_type, funcName);
-        const methodInfo = @typeInfo(@TypeOf(method));
-        if (methodInfo != .Fn) {
-            return false;
-        }
-
-        const methodParams = methodInfo.Fn.params;
-        const methodReturnType = methodInfo.Fn.return_type;
-
-        for (methodParams, funcParams) |m_param, f_param| {
-            if (m_param.type != f_param.type) {
-                return false;
-            }
-        }
-
-        return methodReturnType == funcReturnType;
-    }
-}
-pub fn ensureContainsMethodLog(comptime on_type: type, comptime name: []const u8, comptime func: type) bool {
-    comptime {
-        const funcInfo = @typeInfo(func);
-        if (funcInfo != .Fn) {
-            @compileError("`func` must be a function declaration or function pointer");
-        }
-
-        const funcName = name;
-        const funcParams = funcInfo.Fn.params;
-        const funcReturnType = funcInfo.Fn.return_type;
-
-        const typeInfo = @typeInfo(on_type);
-        if (typeInfo != .Struct) {
-            return false;
-        }
-
-        // Check if the struct has the method
-        const hasMethod = @hasDecl(on_type, funcName);
-        if (!hasMethod) {
-            return false;
-        }
-
-        // Retrieve the method's type info
-        const method = @field(on_type, funcName);
-        const methodInfo = @typeInfo(@TypeOf(method));
-        if (methodInfo != .Fn) {
-            return false;
-        }
-
-        const methodParams = methodInfo.Fn.params;
-        const methodReturnType = methodInfo.Fn.return_type;
-
-        for (methodParams, funcParams) |m_param, f_param| {
-            if (m_param.type != f_param.type) {
-                return false;
-            }
-        }
-
-        return methodReturnType == funcReturnType;
-    }
-}
+const utils = @import("utils");
+pub const TypeId = utils.TypeId;
+pub const clone_slice = utils.clone_slice;
+pub const get_random = utils.get_random;
+pub const get_random_seed = utils.get_random_seed;
+pub const type_id = utils.type_id;
+pub const accessMethod = utils.accessMethod;
+pub const ensureContainsMethod = utils.ensureContainsMethod;
 
 pub fn createSurfaceForWindow(
     instance: *wgpu.Instance,
@@ -258,3 +141,14 @@ pub const RequestAdapterResponse = struct {
     adapter: ?*wgpu.Adapter,
     message: ?[*:0]const u8,
 };
+
+pub inline fn printUnhandledErrorCallback(typ: wgpu.ErrorType, message: [*:0]const u8) void {
+    switch (typ) {
+        .validation => std.log.err("gpu: validation error: {s}\n", .{message}),
+        .out_of_memory => std.log.err("gpu: out of memory: {s}\n", .{message}),
+        .device_lost => std.log.err("gpu: device lost: {s}\n", .{message}),
+        .unknown => std.log.err("gpu: unknown error: {s}\n", .{message}),
+        else => unreachable,
+    }
+    std.process.exit(1);
+}

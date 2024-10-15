@@ -37,7 +37,7 @@ pub const Schedule = struct {
         comptime {
             //@compileLog(@typeName(T));
             //if (!(util.ensureContainsMethod(T, "register", fn (*T, System) void) and util.ensureContainsMethod(T, "execute", fn (*T) void))) {
-            if (!util.ensureContainsMethodLog(T, "register", fn (*T, System) void)) {
+            if (!util.ensureContainsMethod(T, "register", fn (*T, System) void)) {
                 const msg =
                     \\{s} is not a schedule, if you want to implement you own schedules, then you need to make a resource with these methods:
                     \\fn register(self: *Self, system: System) void,

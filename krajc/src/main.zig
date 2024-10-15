@@ -13,6 +13,7 @@ const event_callbacks = @import("glfw_event_callbacks.zig");
 const ecs = @import("ecs/prelude.zig");
 const register = ecs.register;
 const schedule = ecs.schedule;
+const krajc = @import("prelude.zig");
 const Res = ecs.Res;
 const Query = ecs.Query;
 pub const TypeId = utils.TypeId;
@@ -25,7 +26,7 @@ pub const RenderingState = @import("prelude.zig").RenderingState;
 pub const AssetManager = @import("engine_state/asset_manager.zig").AssetManager;
 pub const IAssetLoader = @import("engine_state/asset_manager.zig").IAssetLoader;
 pub const AssetHandle = @import("engine_state/asset_manager.zig").AssetHandle;
-pub const FileLoader = @import("engine_state/asset_manager.zig").FileLoader;
+pub const FileLoader = krajc.FileLoader;
 
 const PlayerInfo = struct {
     health: u16,
@@ -90,34 +91,32 @@ pub fn main() !void {
 
     reg.curr_tick = ecs.Tick.new(2, 0);
 
-    try @import("rendering/data/rendering_state.zig").init_wgpu(window, rendering_state);
-
     const asset_loading_thread = std.Thread.spawn(.{}, AssetManager.run, .{asset_manager}) catch unreachable;
     _ = asset_loading_thread;
+
+    try @import("rendering/data/rendering_state.zig").init_wgpu(window, rendering_state, asset_manager);
+
     //defer asset_loading_thread.join();
 
     var asset = FileLoader.start(asset_manager, "file.txt");
     defer asset.deinit();
-    std.time.sleep(std.time.ns_per_ms * 2900);
-    const loaded = asset.handle.is_loaded();
-    const data = asset.handle.get().*.*;
     //_ = data;
     // not deadlock
-    std.debug.print("ads", .{});
-    // deadlock
-    if (loaded) {
-        //std.log.info("{}", .{data.ptr[0]});
-        std.debug.print("{}", .{data.len});
-        //std.debug.print("{any}", .{data});
-    }
-
-    //std.debug.print("data is: {s}", .{data});
+    std.debug.print("ads\n", .{});
 
     while (!window.shouldClose()) {
-        //const loaded = asset.handle.is_loaded();
+        const loaded = asset.handle.is_loaded();
         //std.debug.print("loaded: {}\n", .{loaded});
 
         //std.debug.print("--------------\n", .{});
+
+        if (loaded) {
+            const data_slice = asset.handle.get();
+            const data = data_slice.ptr[0..data_slice.len];
+
+            const new_file = std.fs.cwd().createFile("new_file.txt", .{}) catch unreachable;
+            _ = new_file.write(data) catch unreachable;
+        }
         key_input.step_frame();
         mouse_input.step_frame();
 
@@ -140,6 +139,8 @@ pub fn main() !void {
             }
         }
         //std.debug.print("mouse state: {}d\n", .{window.getMouseButton(.left)});
+
+        if (mouse_input.is_pressed(.left)) {}
 
         {
             const sched = resource_state.get(schedule.UpdateSchedule);

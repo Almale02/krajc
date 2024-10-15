@@ -7,7 +7,6 @@ const krajc = @import("../prelude.zig");
 pub const AssetManager = struct {
     alloc: std.mem.Allocator,
     entries: std.AutoHashMap(uuid.Uuid, AssetEntrie),
-    //
     chan: zchan.Chan(AssetLoader),
 
     pub const AssetEntrie = struct {
@@ -69,74 +68,8 @@ pub fn AssetHandle(T: type) type {
             const ptr: *T = @ptrCast(@alignCast(self.asset_manager.entries.get(self.id).?.ptr));
             return ptr;
         }
-        pub fn get_copy(self: *const Self) T {
-            self.asset_manager.entries.get(self.id).?.ptr.*;
-        }
         pub fn is_loaded(self: *const Self) bool {
             return self.asset_manager.entries.getPtr(self.id).?.loaded;
         }
     };
 }
-
-pub const FileLoader = struct {
-    asset_manager: *AssetManager,
-    path: []const u8,
-    asset_id: uuid.Uuid,
-    const Self = @This();
-    const Result = struct {
-        loader: *Self,
-        alloc: std.mem.Allocator,
-        // using *[]u8 so that size of the slice is not lost
-        handle: AssetHandle(*[]u8),
-
-        pub fn deinit(self: *Result) void {
-            self.alloc.destroy(self.loader);
-        }
-    };
-
-    pub fn start(asset_manager: *AssetManager, path: []const u8) Result {
-        var mem = asset_manager.alloc.create(Self) catch unreachable;
-        // using *[]u8 so that size of the slice is not lost
-        const asset_handle = asset_manager.reserve_asset(*[]u8);
-        mem.* = Self{ .asset_manager = asset_manager, .path = path, .asset_id = asset_handle.id };
-        asset_manager.chan.send(mem.generic()) catch unreachable;
-        return Result{
-            .loader = mem,
-            .alloc = asset_manager.alloc,
-            .handle = asset_handle,
-        };
-    }
-    pub fn generic(self: *Self) AssetLoader {
-        return AssetLoader{
-            .ptr = self,
-            .load_ptr = load_wrapper,
-        };
-    }
-
-    pub fn load(self: *Self) void {
-        const path = std.fs.cwd().realpathAlloc(self.asset_manager.alloc, self.path) catch |e| {
-            std.debug.panic("failed to read file: {}, path was: {s}/{s}", .{ e, std.fs.cwd().realpathAlloc(self.asset_manager.alloc, ".") catch unreachable, self.path });
-        };
-        const file = std.fs.openFileAbsolute(path, .{ .mode = .read_only }) catch |e| {
-            std.debug.panic("failed to read file: {}, path was: {s}", .{ e, path });
-        };
-        defer file.close();
-        const file_len = file.getEndPos() catch unreachable;
-        const bytes = self.asset_manager.alloc.alloc(u8, std.math.cast(usize, file_len).?) catch unreachable;
-        _ = file.read(bytes) catch |e| {
-            std.debug.panic("opened file, but failed to read content, err msg: {} ", .{e});
-        };
-        const bytes_ptr = self.asset_manager.alloc.create([]u8) catch unreachable;
-        bytes_ptr.* = bytes;
-
-        const asset = self.asset_manager.entries.getPtr(self.asset_id) orelse std.debug.panic("failed to get asset based from asset id in load", .{});
-
-        asset.ptr = @ptrCast(bytes_ptr);
-        asset.loaded = true;
-    }
-    fn load_wrapper(ptr: *anyopaque) void {
-        const self: *Self = @ptrCast(@alignCast(ptr));
-
-        self.load();
-    }
-};
