@@ -1,0 +1,4 @@
+.{
+    .enums = .{"Format"},
+    .bitfields = .{ "FormatSupportBits", "StageBits" },
+}

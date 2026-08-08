@@ -1,0 +1,9 @@
+.{
+    .name = .nri,
+    .version = "1.0.0",
+    .fingerprint = 0x946ffdb07347013c,
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+    },
+}
