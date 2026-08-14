@@ -1,6 +1,6 @@
 const std = @import("std");
 
-pub fn bitfield_gen(arena: std.mem.Allocator, bitfields: []const []const u8, input_tree: *std.zig.Ast, output_writer: *std.Io.Writer) !void {
+pub fn bitfieldGen(arena: std.mem.Allocator, bitfields: []const []const u8, input_tree: *std.zig.Ast, output_writer: *std.Io.Writer) !void {
     for (bitfields) |bitfield_root| {
         const prefix = try std.fmt.allocPrint(arena, "{s}_", .{bitfield_root});
         const root_decls = input_tree.rootDecls();

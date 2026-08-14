@@ -1,6 +1,6 @@
 const std = @import("std");
 
-pub fn enum_gen(alloc: std.mem.Allocator, enums: []const []const u8, input_tree: *std.zig.Ast, output_writer: *std.Io.Writer) !void {
+pub fn enumGen(alloc: std.mem.Allocator, enums: []const []const u8, input_tree: *std.zig.Ast, output_writer: *std.Io.Writer) !void {
     for (enums) |enum_root| {
         const prefix = try std.fmt.allocPrint(alloc, "{s}_", .{enum_root});
         const root_decls = input_tree.rootDecls();
@@ -25,6 +25,7 @@ pub fn enum_gen(alloc: std.mem.Allocator, enums: []const []const u8, input_tree:
         }
         const enum_type = enum_type_opt orelse @panic("enum root wasnt found in the decls");
         try output_writer.print("pub const {[enum_name]s} = enum({[enum_type]s}) {{\n", .{ .enum_name = enum_root, .enum_type = enum_type });
+        try output_writer.print("\tpub const DEFAULT = {s};\n", .{enum_variants.items[0].value});
         for (enum_variants.items) |variant| {
             try output_writer.print("\t{[name]s} = {[value]s},\n", .{ .name = variant.name, .value = variant.value });
         }

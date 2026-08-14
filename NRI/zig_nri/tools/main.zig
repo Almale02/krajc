@@ -1,9 +1,10 @@
 const std = @import("std");
 const enum_gen = @import("nri_enum_gen.zig");
 const bitfield_gen = @import("nri_bitfield_gen.zig");
+const container_gen = @import("nri_container_gen.zig");
 
 const codegen_config = @embedFile("../codegen_config.zon");
-const ConfigType = struct {
+pub const ConfigType = struct {
     enums: []const []const u8,
     bitfields: []const []const u8,
 };
@@ -53,17 +54,20 @@ pub fn main(init: std.process.Init) !void {
 
     try output_writer.writeAll("\n");
 
-    var gen_alloc = std.heap.ArenaAllocator.init(init.gpa);
+    var gen_alloc = std.heap.ArenaAllocator.init(alloc);
     defer gen_alloc.deinit();
-    try enum_gen.enum_gen(gen_alloc.allocator(), config.enums, &input_tree, output_writer);
+    try enum_gen.enumGen(gen_alloc.allocator(), config.enums, &input_tree, output_writer);
     _ = gen_alloc.reset(.retain_capacity);
-    try bitfield_gen.bitfield_gen(gen_alloc.allocator(), config.bitfields, &input_tree, output_writer);
+    try bitfield_gen.bitfieldGen(gen_alloc.allocator(), config.bitfields, &input_tree, output_writer);
+    _ = gen_alloc.reset(.retain_capacity);
+    try container_gen.containerGen(gen_alloc.allocator(), alloc, &config, &input_tree, output_writer);
     _ = gen_alloc.reset(.retain_capacity);
 
     try output_writer.flush();
     output_file_stat = try output_file.stat(init.io);
 }
 
-test {
+comptime {
     std.testing.refAllDecls(@This());
+    std.testing.refAllDecls(container_gen);
 }

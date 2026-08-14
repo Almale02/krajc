@@ -3,10 +3,10 @@ pub const __builtin = @import("std").zig.c_translation.builtins;
 pub const __helpers = @import("std").zig.c_translation.helpers;
 pub const ptrdiff_t = c_long;
 pub const wchar_t = c_int;
-pub const max_align_t = extern struct {
-    __aro_max_align_ll: c_longlong = 0,
-    __aro_max_align_ld: c_longdouble = 0,
-};
+// pub const max_align_t = extern struct {
+//     __aro_max_align_ll: c_longlong = 0,
+//     __aro_max_align_ld: c_longdouble = 0,
+// };
 pub const int_least64_t = i64;
 pub const uint_least64_t = u64;
 pub const int_fast64_t = i64;
