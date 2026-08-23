@@ -1637,7 +1637,6 @@ pub const struct_NriCoreInterface = extern struct {
     DestroyPipeline: ?*const fn (pipeline: ?*Pipeline) callconv(.c) void = null,
     DestroyPipelineCache: ?*const fn (pipelineCache: ?*PipelineCache) callconv(.c) void = null,
     DestroyQueryPool: ?*const fn (queryPool: ?*QueryPool) callconv(.c) void = null,
-
     DestroyFence: ?*const fn (fence: ?*Fence) callconv(.c) void = null,
     AllocateMemory: ?*const fn (device: ?*Device, allocateMemoryDesc: [*c]const AllocateMemoryDesc, memory: [*c]?*Memory) callconv(.c) Result = null,
     FreeMemory: ?*const fn (memory: ?*Memory) callconv(.c) void = null,
@@ -1870,7 +1869,7 @@ pub const struct_NriBottomLevelAabbsDesc = extern struct {
     stride: u32 = 0,
 };
 pub const BottomLevelAabbsDesc = struct_NriBottomLevelAabbsDesc;
-pub const union_unnamed_27 = extern union {
+const union_unnamed_27 = extern union {
     triangles: BottomLevelTrianglesDesc,
     aabbs: BottomLevelAabbsDesc,
 };
@@ -2218,11 +2217,11 @@ pub const struct_NriDLRRSettings = extern struct {
     viewToClipMatrix: [16]f32 = @import("std").mem.zeroes([16]f32),
 };
 pub const DLRRSettings = struct_NriDLRRSettings;
-pub const union_unnamed_28 = extern union {
+const union_unnamed_28 = extern union {
     upscaler: UpscalerGuides,
     denoiser: DenoiserGuides,
 };
-pub const union_unnamed_29 = extern union {
+const union_unnamed_29 = extern union {
     nis: NISSettings,
     fsr: FSRSettings,
     dlrr: DLRRSettings,
@@ -2700,6 +2699,97 @@ pub const struct_NriWrapperVKInterface = extern struct {
 };
 pub const WrapperVKInterface = struct_NriWrapperVKInterface;
 pub extern fn nriCreateDeviceFromVKDevice(deviceDesc: [*c]const DeviceCreationVKDesc, device: [*c]?*Device) Result;
+pub const DXGIFormat = i32;
+pub const struct_AGSContext = opaque {};
+pub const AGSContext = struct_AGSContext;
+pub const struct_ID3D12Heap = opaque {};
+pub const ID3D12Heap = struct_ID3D12Heap;
+pub const struct_ID3D12Fence = opaque {};
+pub const ID3D12Fence = struct_ID3D12Fence;
+pub const struct_ID3D12Device = opaque {};
+pub const ID3D12Device = struct_ID3D12Device;
+pub const struct_ID3D12Resource = opaque {};
+pub const ID3D12Resource = struct_ID3D12Resource;
+pub const struct_ID3D12CommandQueue = opaque {};
+pub const ID3D12CommandQueue = struct_ID3D12CommandQueue;
+pub const struct_ID3D12DescriptorHeap = opaque {};
+pub const ID3D12DescriptorHeap = struct_ID3D12DescriptorHeap;
+pub const struct_ID3D12CommandAllocator = opaque {};
+pub const ID3D12CommandAllocator = struct_ID3D12CommandAllocator;
+pub const struct_ID3D12GraphicsCommandList = opaque {};
+pub const ID3D12GraphicsCommandList = struct_ID3D12GraphicsCommandList;
+pub const struct_NriQueueFamilyD3D12Desc = extern struct {
+    d3d12Queues: [*c]const ?*ID3D12CommandQueue = null,
+    queueNum: u32 = 0,
+    queueType: QueueType = 0,
+};
+pub const QueueFamilyD3D12Desc = struct_NriQueueFamilyD3D12Desc;
+pub const struct_NriDeviceCreationD3D12Desc = extern struct {
+    d3d12Device: ?*ID3D12Device = null,
+    queueFamilies: [*c]const QueueFamilyD3D12Desc = null,
+    queueFamilyNum: u32 = 0,
+    agsContext: ?*AGSContext = null,
+    callbackInterface: CallbackInterface = @import("std").mem.zeroes(CallbackInterface),
+    allocationCallbacks: AllocationCallbacks = @import("std").mem.zeroes(AllocationCallbacks),
+    d3dShaderExtRegister: u32 = 0,
+    d3dZeroBufferSize: u32 = 0,
+    enableNRIValidation: bool = false,
+    enableMemoryZeroInitialization: bool = false,
+    disableD3D12EnhancedBarriers: bool = false,
+    disableNVAPIInitialization: bool = false,
+    pub const nriCreateDeviceFromD3D12Device = __root.nriCreateDeviceFromD3D12Device;
+};
+pub const DeviceCreationD3D12Desc = struct_NriDeviceCreationD3D12Desc;
+pub const struct_NriCommandBufferD3D12Desc = extern struct {
+    d3d12CommandList: ?*ID3D12GraphicsCommandList = null,
+    d3d12CommandAllocator: ?*ID3D12CommandAllocator = null,
+};
+pub const CommandBufferD3D12Desc = struct_NriCommandBufferD3D12Desc;
+pub const struct_NriDescriptorPoolD3D12Desc = extern struct {
+    d3d12ResourceDescriptorHeap: ?*ID3D12DescriptorHeap = null,
+    d3d12SamplerDescriptorHeap: ?*ID3D12DescriptorHeap = null,
+    descriptorSetMaxNum: u32 = 0,
+};
+pub const DescriptorPoolD3D12Desc = struct_NriDescriptorPoolD3D12Desc;
+pub const struct_NriBufferD3D12Desc = extern struct {
+    d3d12Resource: ?*ID3D12Resource = null,
+    desc: [*c]const BufferDesc = null,
+    structureStride: u32 = 0,
+};
+pub const BufferD3D12Desc = struct_NriBufferD3D12Desc;
+pub const struct_NriTextureD3D12Desc = extern struct {
+    d3d12Resource: ?*ID3D12Resource = null,
+    format: DXGIFormat = 0,
+};
+pub const TextureD3D12Desc = struct_NriTextureD3D12Desc;
+pub const struct_NriMemoryD3D12Desc = extern struct {
+    d3d12Heap: ?*ID3D12Heap = null,
+    offset: u64 = 0,
+};
+pub const MemoryD3D12Desc = struct_NriMemoryD3D12Desc;
+pub const struct_NriFenceD3D12Desc = extern struct {
+    d3d12Fence: ?*ID3D12Fence = null,
+};
+pub const FenceD3D12Desc = struct_NriFenceD3D12Desc;
+pub const struct_NriAccelerationStructureD3D12Desc = extern struct {
+    d3d12Resource: ?*ID3D12Resource = null,
+    flags: AccelerationStructureBits = 0,
+    size: u64 = 0,
+    buildScratchSize: u64 = 0,
+    updateScratchSize: u64 = 0,
+};
+pub const AccelerationStructureD3D12Desc = struct_NriAccelerationStructureD3D12Desc;
+pub const struct_NriWrapperD3D12Interface = extern struct {
+    CreateCommandBufferD3D12: ?*const fn (device: ?*Device, commandBufferD3D12Desc: [*c]const CommandBufferD3D12Desc, commandBuffer: [*c]?*CommandBuffer) callconv(.c) Result = null,
+    CreateDescriptorPoolD3D12: ?*const fn (device: ?*Device, descriptorPoolD3D12Desc: [*c]const DescriptorPoolD3D12Desc, descriptorPool: [*c]?*DescriptorPool) callconv(.c) Result = null,
+    CreateBufferD3D12: ?*const fn (device: ?*Device, bufferD3D12Desc: [*c]const BufferD3D12Desc, buffer: [*c]?*Buffer) callconv(.c) Result = null,
+    CreateTextureD3D12: ?*const fn (device: ?*Device, textureD3D12Desc: [*c]const TextureD3D12Desc, texture: [*c]?*Texture) callconv(.c) Result = null,
+    CreateMemoryD3D12: ?*const fn (device: ?*Device, memoryD3D12Desc: [*c]const MemoryD3D12Desc, memory: [*c]?*Memory) callconv(.c) Result = null,
+    CreateFenceD3D12: ?*const fn (device: ?*Device, fenceD3D12Desc: [*c]const FenceD3D12Desc, fence: [*c]?*Fence) callconv(.c) Result = null,
+    CreateAccelerationStructureD3D12: ?*const fn (device: ?*Device, accelerationStructureD3D12Desc: [*c]const AccelerationStructureD3D12Desc, accelerationStructure: [*c]?*AccelerationStructure) callconv(.c) Result = null,
+};
+pub const WrapperD3D12Interface = struct_NriWrapperD3D12Interface;
+pub extern fn nriCreateDeviceFromD3D12Device(deviceDesc: [*c]const DeviceCreationD3D12Desc, device: [*c]?*Device) Result;
 pub const struct_ImDrawList = opaque {};
 pub const ImDrawList = struct_ImDrawList;
 pub const struct_ImTextureData = opaque {};
@@ -11749,5 +11839,6 @@ pub const DEVICE_CREATION_H = @as(c_int, 1);
 pub const SWAP_CHAIN_H = @as(c_int, 1);
 pub const HELPER_H = @as(c_int, 1);
 pub const WRAPPER_VK_H = @as(c_int, 1);
+pub const WRAPPER_D3D12_H = @as(c_int, 1);
 pub const IMGUI_H = @as(c_int, 1);
 pub const IMGUI_OVERRIDE_HDR_SCALE = @compileError("unable to translate macro: undefined identifier `ImDrawCallback`"); // ./_NRI_SDK/Include/Extensions/NRIImgui.h:70:9

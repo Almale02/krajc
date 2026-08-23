@@ -111,6 +111,9 @@ pub fn build(b: *std.Build) void {
     // This allows the user to pass arguments to the application in the build
     // command itself, like this: `zig build run -- arg1 arg2 etc`
     if (b.args) |args| {
+        if (std.mem.eql(u8, args[0], "wayland_debug")) {
+            run_cmd.setEnvironmentVariable("WAYLAND_DEBUG", "1");
+        }
         run_cmd.addArgs(args);
     }
 

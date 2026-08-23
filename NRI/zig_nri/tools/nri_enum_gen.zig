@@ -6,6 +6,7 @@ pub fn enumGen(alloc: std.mem.Allocator, enums: []const []const u8, input_tree: 
         const root_decls = input_tree.rootDecls();
         var enum_variants: std.ArrayList(struct { name: []const u8, value: []const u8 }) = .empty;
         var enum_type_opt: ?[]const u8 = null;
+        var contains_default = false;
         for (root_decls) |decl_idx| {
             const node = input_tree.nodes.get(@intFromEnum(decl_idx));
             if (node.tag != .simple_var_decl) continue;
@@ -20,12 +21,17 @@ pub fn enumGen(alloc: std.mem.Allocator, enums: []const []const u8, input_tree: 
                 const decl_type_name = input_tree.getNodeSource(@enumFromInt(@intFromEnum(node_opt[0])));
                 _ = decl_type_name;
                 const decl_value = input_tree.getNodeSource(@enumFromInt(@intFromEnum(node_opt[1])));
+                if (std.mem.eql(u8, decl_name[prefix.len..], "DEFAULT")) {
+                    contains_default = true;
+                }
                 try enum_variants.append(alloc, .{ .name = decl_name[prefix.len..], .value = decl_value });
             }
         }
         const enum_type = enum_type_opt orelse @panic("enum root wasnt found in the decls");
         try output_writer.print("pub const {[enum_name]s} = enum({[enum_type]s}) {{\n", .{ .enum_name = enum_root, .enum_type = enum_type });
-        try output_writer.print("\tpub const DEFAULT = {s};\n", .{enum_variants.items[0].value});
+        if (!contains_default) {
+            try output_writer.print("\tpub const DEFAULT: @This() = @enumFromInt({s});\n", .{enum_variants.items[0].value});
+        }
         for (enum_variants.items) |variant| {
             try output_writer.print("\t{[name]s} = {[value]s},\n", .{ .name = variant.name, .value = variant.value });
         }

@@ -1,32 +1,40 @@
 const nri_c = @import("nri.zig");
+const api = @import("root.zig").api;
 
-pub const NriError = error{
+pub const Result = error{
     DeviceLost,
     OutOfDate,
     InvalidSdk,
     DriverFailure,
     InvalidArgument,
     OutOfMemory,
-    UnsupportedFeature,
     MaximumNumber,
-    UnknownError,
+    UnsupportedFeature,
 };
 
-pub fn checkResult(result: anytype) NriError!void {
-    const res_val: c_int = @intCast(result);
-
-    return switch (res_val) {
-        nri_c.Result_SUCCESS => {},
-
-        nri_c.Result_DEVICE_LOST => NriError.DeviceLost,
-        nri_c.Result_OUT_OF_DATE => NriError.OutOfDate,
-        nri_c.Result_INVALID_SDK => NriError.InvalidSdk,
-        nri_c.Result_FAILURE => NriError.DriverFailure,
-        nri_c.Result_INVALID_ARGUMENT => NriError.InvalidArgument,
-        nri_c.Result_OUT_OF_MEMORY => NriError.OutOfMemory,
-        nri_c.Result_MAX_NUM => NriError.MaximumNumber,
-        nri_c.Result_UNSUPPORTED => NriError.UnsupportedFeature,
-
-        else => error.UnknownError,
+pub fn checkResult(result: api.Result) Result!void {
+    return switch (result) {
+        api.Result.SUCCESS => {},
+        api.Result.DEVICE_LOST => Result.DeviceLost,
+        api.Result.OUT_OF_DATE => Result.OutOfDate,
+        api.Result.INVALID_SDK => Result.InvalidSdk,
+        api.Result.FAILURE => Result.DriverFailure,
+        api.Result.INVALID_ARGUMENT => Result.InvalidArgument,
+        api.Result.OUT_OF_MEMORY => Result.OutOfMemory,
+        api.Result.MAX_NUM => Result.MaximumNumber,
+        api.Result.UNSUPPORTED => Result.UnsupportedFeature,
+    };
+}
+pub fn checkResultC(result: i8) Result!void {
+    return switch (@as(api.Result, @enumFromInt(result))) {
+        api.Result.SUCCESS => {},
+        api.Result.DEVICE_LOST => Result.DeviceLost,
+        api.Result.OUT_OF_DATE => Result.OutOfDate,
+        api.Result.INVALID_SDK => Result.InvalidSdk,
+        api.Result.FAILURE => Result.DriverFailure,
+        api.Result.INVALID_ARGUMENT => Result.InvalidArgument,
+        api.Result.OUT_OF_MEMORY => Result.OutOfMemory,
+        api.Result.MAX_NUM => Result.MaximumNumber,
+        api.Result.UNSUPPORTED => Result.UnsupportedFeature,
     };
 }
