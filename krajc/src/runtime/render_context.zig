@@ -8,16 +8,10 @@ pub const RenderContext = struct {
     swapchain_textures: []const nri.Texture,
     swapchain_texture_views: []const nri.Descriptor,
     arena: std.mem.Allocator,
+    swapchain_arena: std.heap.ArenaAllocator,
     alloc: std.mem.Allocator,
 
-    pub fn fromSdl3(window: sdl.video.Window, arena: std.mem.Allocator, alloc: std.mem.Allocator) !RenderContext {
-        const props = try window.getProperties();
-        const wayland_surface = props.wayland_surface.?.value;
-        const wayland_display = props.wayland_display.?.value;
-        const size = try window.getSizeInPixels();
-        const size_x = size.@"0";
-        const size_y = size.@"1";
-
+    pub fn fromSdl3(window: *sdl.video.Window, arena: std.mem.Allocator, alloc: std.mem.Allocator) !RenderContext {
         const extensions_null = try sdl.vulkan.getInstanceExtensions();
         var extensions = try arena.alloc([*]u8, extensions_null.len);
         for (0..extensions_null.len) |i| {
@@ -27,25 +21,12 @@ pub const RenderContext = struct {
         var device = try RenderContext.initDevice(arena, extensions);
         const queue = try device.getQueue(.GRAPHICS, 0);
 
-        const swapchain_desc = nri.api.SwapChainDesc{
-            .window = .{ .wayland = .{ .display = wayland_display, .surface = wayland_surface } },
-            .queue = queue.queue,
-            .width = @intCast(size_x),
-            .height = @intCast(size_y),
-            .textureNum = 3,
-            .format = .BT709_G22_8BIT,
-            .flags = .{ .VSYNC = false },
-            .queuedFrameNum = 2,
-            .scaling = .ONE_TO_ONE,
-            .gravityX = .MIN,
-            .gravityY = .MIN,
-        };
-        return RenderContext.initNri(device, queue, swapchain_desc, arena, alloc);
+        var render_ctx = try RenderContext.initNri(device, queue, arena, alloc);
+        try render_ctx.createSwapchain(window, true);
+        return render_ctx;
     }
 
     fn initDevice(arena: std.mem.Allocator, instance_extensions: []const [*]u8) !nri.Device {
-        // const khr_surface_name: [*c]u8 = @constCast("VK_KHR_surface");
-        // const extensions_array = [_][*c]u8{khr_surface_name};
         const device_desc_create = nri.api.DeviceCreationDesc{
             .graphicsAPI = .{ .VK = true },
             .enableNRIValidation = true,
@@ -60,15 +41,63 @@ pub const RenderContext = struct {
         }
         return device;
     }
-    pub fn initNri(in_device: nri.Device, render_queue: nri.Queue, swapchain_desc: nri.api.SwapChainDesc, arena: std.mem.Allocator, alloc: std.mem.Allocator) !RenderContext {
-        var device = in_device;
-        const swapchain = try device.createSwapchain(swapchain_desc);
+    fn initNri(
+        device: nri.Device,
+        render_queue: nri.Queue,
+        arena: std.mem.Allocator,
+        alloc: std.mem.Allocator,
+    ) !RenderContext {
+        return RenderContext{
+            .device = device,
+            .render_queue = render_queue,
+            .swapchain = undefined,
+            .swapchain_textures = undefined,
+            .swapchain_texture_views = undefined,
+            .arena = arena,
+            .swapchain_arena = std.heap.ArenaAllocator.init(alloc),
+            .alloc = alloc,
+        };
+    }
+    pub fn createSwapchain(self: *RenderContext, window: *sdl.video.Window, init: bool) !void {
+        const props = try window.getProperties();
+        const wayland_surface = props.wayland_surface.?.value;
+        const wayland_display = props.wayland_display.?.value;
+        const size = try window.getSizeInPixels();
+        const size_x = size.@"0";
+        const size_y = size.@"1";
+
+        const swapchain_desc = nri.api.SwapChainDesc{
+            .window = .{ .wayland = .{ .display = wayland_display, .surface = wayland_surface } },
+            .queue = self.render_queue.queue,
+            .width = @intCast(size_x),
+            .height = @intCast(size_y),
+            .textureNum = 3,
+            .format = .BT709_G22_8BIT,
+            .flags = .{ .VSYNC = true },
+            .queuedFrameNum = 2,
+            .scaling = .ONE_TO_ONE,
+            .gravityX = .MIN,
+            .gravityY = .MIN,
+        };
+        if (!init) {
+            try self.render_queue.waitIdle();
+            self.swapchain.destroy();
+            for (self.swapchain_texture_views) |view| {
+                view.destroy(&self.device);
+            }
+        }
+        _ = self.swapchain_arena.reset(.retain_capacity);
+        const swapchain_arena = self.swapchain_arena.allocator();
+
+        const swapchain = try self.device.createSwapchain(swapchain_desc);
         const textures = swapchain.getTextures();
-        const texture_desc = textures[0].getDesc(&device);
-        const swapchain_views = try alloc.alloc(nri.Descriptor, textures.len);
+        const texture_desc = textures[0].getDesc(&self.device);
+        const swapchain_views = try swapchain_arena.alloc(nri.Descriptor, textures.len);
+
+        std.debug.print("created window: {}x{}\n", .{ texture_desc.width, texture_desc.height });
 
         for (textures, 0..) |texture, i| {
-            const texture_descriptor = try device.createTextureView(.{
+            const texture_descriptor = try self.device.createTextureView(.{
                 .texture = texture.texture,
                 .type = nri.api.TextureView.COLOR_ATTACHMENT,
                 .format = texture_desc.format,
@@ -83,17 +112,13 @@ pub const RenderContext = struct {
             });
             swapchain_views[i] = texture_descriptor;
         }
-        return RenderContext{
-            .device = device,
-            .render_queue = render_queue,
-            .swapchain = swapchain,
-            .swapchain_textures = textures,
-            .swapchain_texture_views = swapchain_views,
-            .arena = arena,
-            .alloc = alloc,
-        };
+        self.swapchain = swapchain;
+        self.swapchain_textures = textures;
+        self.swapchain_texture_views = swapchain_views;
     }
-    fn initSurface() RenderContext {}
+    pub fn deinit(self: *RenderContext) void {
+        self.swapchain_arena.deinit();
+    }
 };
 
 test {

@@ -10,8 +10,9 @@ pub fn main(init: std.process.Init) !void {
     try sdl.init(sdl_flags);
     defer sdl.quit(sdl_flags);
 
-    const window = try sdl.video.Window.init("Krajc engine", 1920, 1080, .{ .vulkan = true, .resizable = true, .transparent = true });
-    var render_ctx = try render.RenderContext.fromSdl3(window, init.arena.allocator(), init.gpa);
+    var window = try sdl.video.Window.init("Krajc engine", 1920, 1080, .{ .vulkan = true, .resizable = true, .transparent = true });
+    var render_ctx = try render.RenderContext.fromSdl3(&window, init.arena.allocator(), init.gpa);
+    defer render_ctx.deinit();
     const device = &render_ctx.device;
     const queue = &render_ctx.render_queue;
     const swapchain = &render_ctx.swapchain;
@@ -50,7 +51,12 @@ pub fn main(init: std.process.Init) !void {
                     }
                 },
                 .window_resized => |window_resize| {
-                    std.debug.print("resized: {}", .{window_resize});
+                    if (window_resize.width != 0 and window_resize.height != 0) {
+                        try render_ctx.createSwapchain(&window, false);
+                    }
+                },
+                .window_display_scale_changed => {
+                    try render_ctx.createSwapchain(&window, false);
                 },
                 else => {},
             }
@@ -110,10 +116,11 @@ pub fn main(init: std.process.Init) !void {
         frame_sync_fence.wait(frame_counter);
         frame_counter += 1;
         const now = std.Io.Clock.real.now(init.io).toMicroseconds();
-        const frame_dt = now - frame_start_time;
+        // const frame_dt = now - frame_start_time;
         frame_start_time = now;
-        std.debug.print("frame: {}, dt: {}\n", .{ frame_counter, @as(f32, @floatFromInt(frame_dt)) / @as(f32, @floatFromInt(std.time.us_per_ms)) });
+        // std.debug.print("frame: {}, dt: {}\n", .{ frame_counter, @as(f32, @floatFromInt(frame_dt)) / @as(f32, @floatFromInt(std.time.us_per_ms)) });
     }
+    frame_arena_alloc.deinit();
 }
 
 test {
