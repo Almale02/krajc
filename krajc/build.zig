@@ -74,10 +74,10 @@ pub fn build(b: *std.Build) void {
         .name = "krajc_runtime",
         .root_module = exe_module,
     });
+    exe.use_llvm = true;
 
     const nri_build = nri.builder.top_level_steps.get("nri_build").?;
     exe.step.dependOn(&nri_build.step);
-    // const nri_root = nri.builder.build_root.path.?;
 
     const copy_lib = b.addInstallFileWithDir(nri_so_path, .bin, "libNRI.so");
     b.getInstallStep().dependOn(&copy_lib.step);

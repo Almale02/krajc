@@ -186,6 +186,8 @@ pub fn containerGen(arena: std.mem.Allocator, alloc: std.mem.Allocator, config: 
                                         } else {
                                             try new_fields.append(arena, .{ .name = curr_name, .field_type = curr_type, .value = "null" });
                                         }
+                                    } else {
+                                        try new_fields.append(arena, .{ .name = curr_name, .field_type = curr_type, .value = "null" });
                                     }
                                 },
                                 .PointerNull => {
