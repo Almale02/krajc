@@ -1,0 +1,3 @@
+[submodule "NRI"]
+	path = NRI
+	url = https://github.com/Almale02/nri-zig
