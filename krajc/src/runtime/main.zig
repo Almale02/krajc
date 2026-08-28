@@ -4,6 +4,9 @@ const nri = @import("nri");
 const sdl = @import("sdl");
 pub const render = @import("render_context.zig");
 const nri_c = nri.nri_c;
+
+// const Component = ecs.Component(struct { value: f32 });
+
 pub fn main(init: std.process.Init) !void {
     defer sdl.shutdown();
     const sdl_flags = sdl.InitFlags{ .events = true, .video = true };
